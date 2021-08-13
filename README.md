@@ -1,10 +1,11 @@
 # skbtracer
 
-skbtracer 基于 ebpf 技术的 skb 网络包路径追踪利器， 基于 Python 版本 [skbtracer](https://github.com/DavadDi/skbtracer) 实现的一个 Go 版本，代码基于 [goebpf](https://github.com/dropbox/goebpf) (required Linux Kernel 4.15+, Go 1.16+)。
+skbtracer 基于 ebpf 技术的 skb 网络包路径追踪利器， 参考 Python 版本 [skbtracer](https://github.com/DavadDi/skbtracer) 实现的一个 Go 版本，代码基于 [goebpf](https://github.com/dropbox/goebpf) , [libbpf-bootstrap](https://github.com/libbpf/libbpf-bootstrap) (required Linux Kernel 4.15+ with CONFIG_DEBUG_INFO_BTF=y, Go 1.16+)。
 
 ## 使用样例
 
-```
+```bash
+$ ./skbtracer -h
 examples:
 skbtracer                                      # trace all packets
 skbtracer --proto=icmp -H 1.2.3.4 --icmpid 22  # trace icmp packet with addr=1.2.3.4 and icmpid=22
@@ -76,4 +77,13 @@ TIME       NETWORK_NS   CPU    INTERFACE          DEST_MAC           IP_LEN PKT_
 
 ## 测试环境
 
-- Ubuntu 18.04.5 LTS, kernel 5.10.29-051029-generic
+Good:
+
+- [x] Ubuntu 18.04.5 LTS, kernel 5.10.29-051029-generic
+- [x] Ubuntu 21.04, kernel 5.11.0-25-generic, with CONFIG_DEBUG_INFO_BTF=m
+
+Bad:
+
+- Centos, kernel 4.19.163
+- Ubuntu 18.04.3 LTS, kernel 4.19.0-9, no CONFIG_DEBUG_INFO_BTF=y
+
