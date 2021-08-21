@@ -71,6 +71,7 @@ TIME       NETWORK_NS   CPU    INTERFACE          DEST_MAC           IP_LEN PKT_
 
 ## TODO
 
+- [ ] tracepoint:{net,tcp,udp}:*
 - [ ] 打印函数调用栈，需要根据地址找到对应的函数名称
 - [ ] 支持 `kprobe deliver_clone`
 - [ ] 支持 `kprobe __kfree_skb`
@@ -79,11 +80,11 @@ TIME       NETWORK_NS   CPU    INTERFACE          DEST_MAC           IP_LEN PKT_
 
 Good:
 
-- [x] Ubuntu 18.04.5 LTS, kernel 5.10.29-051029-generic
+- [x] Ubuntu 18.04.5 LTS, kernel 5.10.29-051029-generic, with CONFIG_DEBUG_INFO_BTF=y
 - [x] Ubuntu 21.04, kernel 5.11.0-25-generic, with CONFIG_DEBUG_INFO_BTF=m
 
 Bad:
 
 - Centos, kernel 4.19.163
-- Ubuntu 18.04.3 LTS, kernel 4.19.0-9, no CONFIG_DEBUG_INFO_BTF=y
+- Ubuntu 18.04.3 LTS, kernel 4.19.0-9, without CONFIG_DEBUG_INFO_BTF=y
 
