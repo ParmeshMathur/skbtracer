@@ -12,8 +12,7 @@ import (
 type bpfEvent struct {
 	FuncName [64]byte
 	Flags    byte
-	CPU      byte
-	_pad     [2]byte
+	CPU      uint32
 
 	KernelStackID int32
 
@@ -110,8 +109,8 @@ func (e *bpfEvent) toEvent() *Event {
 type Event struct {
 	FuncName string
 	Flags    uint8
-	CPU      uint8
-	_pad     [6]byte
+	CPU      uint32
+	_pad     [3]byte
 
 	Ifname string
 	NetNS  uint32

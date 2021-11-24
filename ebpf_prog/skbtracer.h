@@ -131,8 +131,7 @@ struct event_t
 {
     char func_name[FUNCNAME_MAX_LEN];
     __u8 flags;
-    __u8 cpu;
-    __u8 _pad0[2];
+    __u32 cpu;
 
     __s32 kernel_stack_id;
 
