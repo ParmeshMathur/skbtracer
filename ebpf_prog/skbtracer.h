@@ -434,8 +434,6 @@ INLINE void set_event_info(struct sk_buff *skb, struct pt_regs *ctx,
 
 INLINE void set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info,
                          void *netdev) {
-    char *dev_name;
-
     struct net_device *dev = get_net_device(skb, netdev);
     member_read(&pkt_info->len, skb, len);
     pkt_info->cpu = bpf_get_smp_processor_id();
@@ -444,8 +442,7 @@ INLINE void set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info,
     pkt_info->pkt_type = get_pkt_type(skb);
 
     pkt_info->ifname[0] = 0;
-    member_read(&dev_name, dev, name);
-    bpf_probe_read(&pkt_info->ifname, IFNAMSIZ, dev_name);
+    bpf_probe_read(&pkt_info->ifname, IFNAMSIZ, (char *)dev + offsetof(typeof(*dev), name));
     if (pkt_info->ifname[0] == 0) bpf_strncpy(pkt_info->ifname, "nil", IFNAMSIZ);
 }
 
