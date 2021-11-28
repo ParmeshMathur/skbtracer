@@ -4,8 +4,8 @@
 
 char _license[] SEC("license") = "GPL";
 
-#define ETH_P_IP	0x0800		/* Internet Protocol packet	*/
-#define ETH_P_IPV6	0x86DD		/* IPv6 over bluebook		*/
+#define ETH_P_IP 0x0800   /* Internet Protocol packet	*/
+#define ETH_P_IPV6 0x86DD /* IPv6 over bluebook		*/
 
 #define IPPROTO_HOPOPTS 0   /* IPv6 hop-by-hop options      */
 #define IPPROTO_ROUTING 43  /* IPv6 routing header          */
@@ -50,20 +50,16 @@ char _license[] SEC("license") = "GPL";
 
 typedef unsigned long args_t;
 
-INLINE void get_args(struct pt_regs *ctx, unsigned long *args)
-{
+INLINE void get_args(struct pt_regs *ctx, unsigned long *args) {
     // if registers are valid then use them directly (kernel version < 4.17)
-    if (ctx->orig_ax || ctx->bx || ctx->cx || ctx->dx)
-    {
+    if (ctx->orig_ax || ctx->bx || ctx->cx || ctx->dx) {
         args[0] = PT_REGS_PARM1(ctx);
         args[1] = PT_REGS_PARM2(ctx);
         args[2] = PT_REGS_PARM3(ctx);
         args[3] = PT_REGS_PARM4(ctx);
         args[4] = PT_REGS_PARM5(ctx);
         args[5] = PT_REGS_PARM6(ctx);
-    }
-    else
-    {
+    } else {
         // otherwise it's a later kernel version so load register values from
         // ctx->di.
         struct pt_regs *regs = (struct pt_regs *)ctx->di;
@@ -103,8 +99,7 @@ BPF_MAP_ADD(skbtracer_cfg);
 #define cfg_netns 11
 
 #define DEF_GET_CFG(name)                              \
-    INLINE u64 get_cfg_##name(void)                    \
-    {                                                  \
+    INLINE u64 get_cfg_##name(void) {                  \
         u8 key = cfg_##name;                           \
         u64 *v;                                        \
         v = bpf_map_lookup_elem(&skbtracer_cfg, &key); \
@@ -124,23 +119,21 @@ DEF_GET_CFG(proto)
 DEF_GET_CFG(netns)
 
 union addr {
-	u32 v4addr;
+    u32 v4addr;
     struct {
         u64 pre;
         u64 post;
     } v6addr;
-	u64 pad[2];
+    u64 pad[2];
 };
 
-struct l2_info_t
-{
+struct l2_info_t {
     u8 dest_mac[6];
     u16 l3_proto;
     u8 pad[4];
 };
 
-struct l3_info_t
-{
+struct l3_info_t {
     union addr saddr;
     union addr daddr;
     u16 tot_len;
@@ -149,24 +142,21 @@ struct l3_info_t
     u8 pad[4];
 };
 
-struct l4_info_t
-{
+struct l4_info_t {
     u16 sport;
     u16 dport;
     u8 tcpflags;
     u8 pad[3];
 };
 
-struct icmp_info_t
-{
+struct icmp_info_t {
     u16 icmpid;
     u16 icmpseq;
     u8 icmptype;
     u8 pad[3];
 };
 
-struct iptables_info_t
-{
+struct iptables_info_t {
     char tablename[XT_TABLE_MAXNAMELEN];
     u32 hook;
     u32 verdict;
@@ -175,19 +165,17 @@ struct iptables_info_t
     u8 pad[7];
 };
 
-struct pkt_info_t
-{
+struct pkt_info_t {
     char ifname[IFNAMSIZ];
     u32 len;
     u32 cpu;
     u32 pid;
     u32 netns;
-    u8 pkt_type; //skb->pkt_type
+    u8 pkt_type; // skb->pkt_type
     u8 pad[7];
 };
 
-struct event_t
-{
+struct event_t {
     char func_name[FUNCNAME_MAX_LEN];
     u64 skb;
     u64 start_ns;
@@ -211,13 +199,11 @@ BPF_MAP_DEF(event_buf) = {
 };
 BPF_MAP_ADD(event_buf);
 
-INLINE struct event_t *
-get_event_buf(void) {
+INLINE struct event_t *get_event_buf(void) {
     u32 ev_buff_id = 0;
     struct event_t *ev;
     ev = bpf_map_lookup_elem(&event_buf, &ev_buff_id);
-    if (!ev)
-        return NULL;
+    if (!ev) return NULL;
     return ev;
 }
 
@@ -232,8 +218,7 @@ BPF_MAP_DEF(skbtracer_event) = {
 };
 BPF_MAP_ADD(skbtracer_event);
 
-struct ipt_do_table_args
-{
+struct ipt_do_table_args {
     struct sk_buff *skb;
     const struct nf_hook_state *state;
     struct xt_table *table;
@@ -256,25 +241,20 @@ BPF_MAP_DEF(skbtracer_stack) = {
 BPF_MAP_ADD(skbtracer_stack);
 
 #define MAC_HEADER_SIZE 14
-#define member_address(source_struct, source_member)                                                     \
-    (                                                                                                    \
-        {                                                                                                \
-            void *__ret;                                                                                 \
-            __ret = (void *)(((char *)source_struct) + offsetof(typeof(*source_struct), source_member)); \
-            __ret;                                                                                       \
-        })
+#define member_address(source_struct, source_member)                                                 \
+    ({                                                                                               \
+        void *__ret;                                                                                 \
+        __ret = (void *)(((char *)source_struct) + offsetof(typeof(*source_struct), source_member)); \
+        __ret;                                                                                       \
+    })
 
-#define member_read(destination, source_struct, source_member) \
-    do                                                         \
-    {                                                          \
-        bpf_probe_read(                                        \
-            destination,                                       \
-            sizeof(source_struct->source_member),              \
-            member_address(source_struct, source_member));     \
+#define member_read(destination, source_struct, source_member)            \
+    do {                                                                  \
+        bpf_probe_read(destination, sizeof(source_struct->source_member), \
+                       member_address(source_struct, source_member));     \
     } while (0)
 
-enum
-{
+enum {
     __TCP_FLAG_CWR,
     __TCP_FLAG_ECE,
     __TCP_FLAG_URG,
@@ -286,68 +266,55 @@ enum
 };
 
 #define TCP_FLAGS_INIT(new_flags, orig_flags, flag) \
-    do                                              \
-    {                                               \
-        if (orig_flags & flag)                      \
-        {                                           \
+    do {                                            \
+        if (orig_flags & flag) {                    \
             new_flags |= (1U << __##flag);          \
         }                                           \
     } while (0)
 
-#define init_tcpflags_bits(new_flags, orig_flags)                \
-    (                                                            \
-        {                                                        \
-            new_flags = 0;                                       \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_CWR); \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_ECE); \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_URG); \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_ACK); \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_PSH); \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_RST); \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_SYN); \
-            TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_FIN); \
-        })
+#define init_tcpflags_bits(new_flags, orig_flags)            \
+    ({                                                       \
+        new_flags = 0;                                       \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_CWR); \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_ECE); \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_URG); \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_ACK); \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_PSH); \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_RST); \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_SYN); \
+        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_FIN); \
+    })
 
-INLINE void
-get_stack(struct pt_regs *ctx, struct event_t *event) {
+INLINE void get_stack(struct pt_regs *ctx, struct event_t *event) {
     event->kernel_stack_id = bpf_get_stackid(ctx, &skbtracer_stack, 0);
     return;
 }
 
-INLINE int
-_has_callstack(void) {
+INLINE int _has_callstack(void) {
     return 0 != get_cfg_callstack();
 }
 
-#define CALL_STACK(ctx, event)     \
-    do                             \
-    {                              \
-        if (_has_callstack())      \
-            get_stack(ctx, event); \
+#define CALL_STACK(ctx, event)                       \
+    do {                                             \
+        if (_has_callstack()) get_stack(ctx, event); \
     } while (0)
 
-INLINE void
-bpf_strncpy(char *dst, const char *src, int n) {
+INLINE void bpf_strncpy(char *dst, const char *src, int n) {
     int i = 0, j;
-#define CPY(n)               \
-    do                       \
-    {                        \
-        for (; i < n; i++)   \
-        {                    \
-            if (src[i] == 0) \
-                return;      \
-            dst[i] = src[i]; \
-        }                    \
+#define CPY(n)                       \
+    do {                             \
+        for (; i < n; i++) {         \
+            if (src[i] == 0) return; \
+            dst[i] = src[i];         \
+        }                            \
     } while (0)
 
-    for (j = 10; j < 64; j += 10)
-        CPY(j);
+    for (j = 10; j < 64; j += 10) CPY(j);
     CPY(64);
 #undef CPY
 }
 
-INLINE struct net_device *
-get_net_device(struct sk_buff *skb, void *netdev) {
+INLINE struct net_device *get_net_device(struct sk_buff *skb, void *netdev) {
     struct net_device *dev;
     if (netdev)
         dev = (struct net_device *)netdev;
@@ -356,26 +323,25 @@ get_net_device(struct sk_buff *skb, void *netdev) {
     return dev;
 }
 
-INLINE u32
-get_netns(struct sk_buff *skb, struct net_device *dev) {
+INLINE u32 get_netns(struct sk_buff *skb, struct net_device *dev) {
     struct net *net;
     u32 netns;
 
-    // Get netns id. The code below is equivalent to: netns = dev->nd_net.net->ns.inum
+    // Get netns id. The code below is equivalent to: netns =
+    // dev->nd_net.net->ns.inum
     possible_net_t *skc_net = &dev->nd_net;
     member_read(&net, skc_net, net);
     struct ns_common *ns = member_address(net, ns);
     member_read(&netns, ns, inum);
 
-    // maybe the skb->dev is not init, for this situation, we can get ns by sk->__sk_common.skc_net.net->ns.inum
-    if (netns == 0)
-    {
+    // maybe the skb->dev is not init, for this situation, we can get ns by
+    // sk->__sk_common.skc_net.net->ns.inum
+    if (netns == 0) {
         struct sock *sk;
         struct sock_common __sk_common;
         struct ns_common *ns2;
         member_read(&sk, skb, sk);
-        if (sk != NULL)
-        {
+        if (sk != NULL) {
             member_read(&__sk_common, sk, __sk_common);
             ns2 = member_address(__sk_common.skc_net.net, ns);
             member_read(&netns, ns2, inum);
@@ -398,29 +364,26 @@ union ___skb_pkt_type {
     };
 };
 
-INLINE u8
-get_pkt_type(struct sk_buff *skb) {
+INLINE u8 get_pkt_type(struct sk_buff *skb) {
     union ___skb_pkt_type type = {};
-    bpf_probe_read(&type.value, 1, ((char *)skb) + offsetof(struct sk_buff, __pkt_type_offset));
+    bpf_probe_read(&type.value, 1,
+                   ((char *)skb) + offsetof(struct sk_buff, __pkt_type_offset));
     return type.pkt_type;
 }
 
-INLINE u8
-get_ip_version(void *hdr) {
+INLINE u8 get_ip_version(void *hdr) {
     u8 first_byte;
     bpf_probe_read(&first_byte, 1, hdr);
-    return (first_byte>>4) & 0x0f;
+    return (first_byte >> 4) & 0x0f;
 }
 
-INLINE u8
-get_ipv4_header_len(void *hdr) {
+INLINE u8 get_ipv4_header_len(void *hdr) {
     u8 first_byte;
     bpf_probe_read(&first_byte, 1, hdr);
-    return (first_byte&0x0f) * 4;
+    return (first_byte & 0x0f) * 4;
 }
 
-INLINE char *
-get_l2_header(struct sk_buff *skb) {
+INLINE char *get_l2_header(struct sk_buff *skb) {
     char *head;
     u16 mac_header;
 
@@ -429,21 +392,18 @@ get_l2_header(struct sk_buff *skb) {
     return head + mac_header;
 }
 
-INLINE char *
-get_l3_header(struct sk_buff *skb) {
+INLINE char *get_l3_header(struct sk_buff *skb) {
     char *head;
     u16 mac_header, network_header;
 
     member_read(&head, skb, head);
     member_read(&mac_header, skb, mac_header);
     member_read(&network_header, skb, network_header);
-    if (network_header==0)
-        network_header = mac_header + MAC_HEADER_SIZE;
+    if (network_header == 0) network_header = mac_header + MAC_HEADER_SIZE;
     return head + network_header;
 }
 
-INLINE char *
-get_l4_header(struct sk_buff *skb) {
+INLINE char *get_l4_header(struct sk_buff *skb) {
     char *head;
     u8 ip_version, ihl;
     u16 mac_header, network_header, transport_header;
@@ -451,8 +411,7 @@ get_l4_header(struct sk_buff *skb) {
     member_read(&head, skb, head);
     member_read(&mac_header, skb, mac_header);
     member_read(&network_header, skb, network_header);
-    if (network_header == 0)
-        network_header = mac_header + MAC_HEADER_SIZE;
+    if (network_header == 0) network_header = mac_header + MAC_HEADER_SIZE;
     member_read(&transport_header, skb, transport_header);
     if (transport_header == 0) {
         ip_version = get_ip_version(head + network_header);
@@ -466,15 +425,15 @@ get_l4_header(struct sk_buff *skb) {
     return head + transport_header;
 }
 
-INLINE void
-set_event_info(struct sk_buff *skb, struct pt_regs *ctx, struct event_t *ev) {
+INLINE void set_event_info(struct sk_buff *skb, struct pt_regs *ctx,
+                           struct event_t *ev) {
     ev->skb = (u64)skb;
     ev->start_ns = bpf_ktime_get_ns();
     CALL_STACK(ctx, ev);
 }
 
-INLINE void
-set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info, void *netdev) {
+INLINE void set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info,
+                         void *netdev) {
     char *dev_name;
 
     struct net_device *dev = get_net_device(skb, netdev);
@@ -487,12 +446,10 @@ set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info, void *netdev) {
     pkt_info->ifname[0] = 0;
     member_read(&dev_name, dev, name);
     bpf_probe_read(&pkt_info->ifname, IFNAMSIZ, dev_name);
-    if (pkt_info->ifname[0] == 0)
-        bpf_strncpy(pkt_info->ifname, "nil", IFNAMSIZ);
+    if (pkt_info->ifname[0] == 0) bpf_strncpy(pkt_info->ifname, "nil", IFNAMSIZ);
 }
 
-INLINE void
-set_ether_info(struct sk_buff *skb, struct l2_info_t *l2_info) {
+INLINE void set_ether_info(struct sk_buff *skb, struct l2_info_t *l2_info) {
     char *dest;
 
     struct ethhdr *eh = (struct ethhdr *)get_l2_header(skb);
@@ -502,8 +459,7 @@ set_ether_info(struct sk_buff *skb, struct l2_info_t *l2_info) {
     l2_info->l3_proto = bpf_ntohs(l2_info->l3_proto);
 }
 
-INLINE void
-set_ipv4_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
+INLINE void set_ipv4_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
     struct iphdr *iph = (struct iphdr *)get_l3_header(skb);
     member_read(&l3_info->saddr.v4addr, iph, saddr);
     member_read(&l3_info->daddr.v4addr, iph, daddr);
@@ -513,18 +469,18 @@ set_ipv4_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
     l3_info->ip_version = get_ip_version(iph);
 }
 
-INLINE void
-set_ipv6_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
+INLINE void set_ipv6_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
     struct ipv6hdr *iph = (struct ipv6hdr *)get_l3_header(skb);
-    bpf_probe_read(&l3_info->saddr.v6addr, ADDRSIZE, (char *)iph + offsetof(struct ipv6hdr, saddr));
-    bpf_probe_read(&l3_info->daddr.v6addr, ADDRSIZE, (char *)iph + offsetof(struct ipv6hdr, daddr));
+    bpf_probe_read(&l3_info->saddr.v6addr, ADDRSIZE,
+                   (char *)iph + offsetof(struct ipv6hdr, saddr));
+    bpf_probe_read(&l3_info->daddr.v6addr, ADDRSIZE,
+                   (char *)iph + offsetof(struct ipv6hdr, daddr));
     member_read(&l3_info->tot_len, iph, payload_len);
     member_read(&l3_info->l4_proto, iph, nexthdr);
     l3_info->ip_version = get_ip_version(iph);
 }
 
-INLINE void
-set_tcp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
+INLINE void set_tcp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
     __be32 tcpflags;
 
     struct tcphdr *th = (struct tcphdr *)get_l4_header(skb);
@@ -538,8 +494,7 @@ set_tcp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
     l4_info->tcpflags = bpf_ntohs(l4_info->tcpflags);
 }
 
-INLINE void
-set_udp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
+INLINE void set_udp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
     struct udphdr *uh = (struct udphdr *)get_l4_header(skb);
     member_read(&l4_info->sport, uh, source);
     l4_info->sport = bpf_ntohs(l4_info->sport);
@@ -547,8 +502,7 @@ set_udp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
     l4_info->dport = bpf_ntohs(l4_info->dport);
 }
 
-INLINE void
-set_icmp_info(struct sk_buff *skb, struct icmp_info_t *icmp_info) {
+INLINE void set_icmp_info(struct sk_buff *skb, struct icmp_info_t *icmp_info) {
     struct icmphdr ih;
     char *l4_header = get_l4_header(skb);
     bpf_probe_read(&ih, sizeof(ih), l4_header);
@@ -558,8 +512,9 @@ set_icmp_info(struct sk_buff *skb, struct icmp_info_t *icmp_info) {
     icmp_info->icmpseq = bpf_ntohs(ih.un.echo.sequence);
 }
 
-INLINE void
-set_iptables_info(struct xt_table *table, const struct nf_hook_state *state, u32 verdict, u64 delay, struct iptables_info_t *ipt_info) {
+INLINE void set_iptables_info(struct xt_table *table,
+                              const struct nf_hook_state *state, u32 verdict,
+                              u64 delay, struct iptables_info_t *ipt_info) {
     member_read(&ipt_info->tablename, table, name);
     member_read(&ipt_info->hook, state, hook);
     ipt_info->verdict = verdict;
@@ -567,8 +522,7 @@ set_iptables_info(struct xt_table *table, const struct nf_hook_state *state, u32
     member_read(&ipt_info->pf, state, pf);
 }
 
-INLINE bool
-filter_l3_and_l4_info(struct sk_buff *skb) {
+INLINE bool filter_l3_and_l4_info(struct sk_buff *skb) {
     u64 addr = get_cfg_ip();
     u64 proto = get_cfg_proto();
     u64 port = get_cfg_port();
@@ -600,8 +554,7 @@ filter_l3_and_l4_info(struct sk_buff *skb) {
     member_read(&l3_proto, eh, h_proto);
     l3_proto = bpf_ntohs(l3_proto);
 
-    if (l3_proto != ETH_P_IP && l3_proto != ETH_P_IPV6)
-        return true;
+    if (l3_proto != ETH_P_IP && l3_proto != ETH_P_IPV6) return true;
 
     // filter ip addr
     ip_version = get_ip_version(l3_header);
@@ -678,35 +631,30 @@ filter_l3_and_l4_info(struct sk_buff *skb) {
     return false;
 }
 
-INLINE bool
-filter_pid(void) {
+INLINE bool filter_pid(void) {
     u64 cfg = get_cfg_pid();
     u64 tgid = bpf_get_current_pid_tgid() >> 32;
     return cfg != 0 && cfg != tgid;
 }
 
-INLINE bool
-filter_netns(struct sk_buff *skb, struct net_device *netdev) {
+INLINE bool filter_netns(struct sk_buff *skb, struct net_device *netdev) {
     u64 cfg = get_cfg_netns();
     struct net_device *dev = get_net_device(skb, netdev);
     u32 netns = get_netns(skb, dev);
     return cfg != 0 && netns != 0 && cfg != netns;
 }
 
-INLINE bool
-filter_route(void) {
+INLINE bool filter_route(void) {
     u64 cfg = get_cfg_noroute();
     return cfg != 0;
 }
 
-INLINE bool
-filter_iptables(void) {
+INLINE bool filter_iptables(void) {
     u64 cfg = get_cfg_iptable();
     return cfg == 0;
 }
 
-INLINE bool
-filter_dropstack(void) {
+INLINE bool filter_dropstack(void) {
     u64 cfg = get_cfg_dropstack();
     return cfg == 0;
 }
