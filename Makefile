@@ -10,9 +10,13 @@ GO_BINARY := skbtracer
 EBPF_SOURCE := ebpf_prog/skbtracer.c
 EBPF_BINARY := cmd/skbtracer/skbtracer.elf
 
-.PHONY: all rebuild build_ebpf build_go clean pahole objdump
+.PHONY: all debug rebuild build_ebpf build_go clean pahole objdump
 
 all: build_ebpf build_go
+
+debug:
+	$(CLANG) $(CLANG_INCLUDE) -O2 -g -target bpf -c $(EBPF_SOURCE)  -o $(EBPF_BINARY) -DDEBUG
+	$(GOBUILD) -v -o $(GO_BINARY) $(GO_SOURCE)
 
 rebuild: clean all
 

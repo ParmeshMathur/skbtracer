@@ -325,27 +325,30 @@ INLINE struct net_device *get_net_device(struct sk_buff *skb, void *netdev) {
 }
 
 INLINE u32 get_netns(struct sk_buff *skb, struct net_device *dev) {
-    struct net *net;
     u32 netns;
 
-    // Get netns id. The code below is equivalent to: netns =
+    // Get netns inode. The code below is equivalent to: netns =
     // dev->nd_net.net->ns.inum
-    possible_net_t *skc_net = &dev->nd_net;
+    possible_net_t *skc_net;
+    struct net *net;
+    struct ns_common *ns;
+    skc_net = member_address(dev, nd_net);
     member_read(&net, skc_net, net);
-    struct ns_common *ns = member_address(net, ns);
+    ns = member_address(net, ns);
     member_read(&netns, ns, inum);
 
-    // maybe the skb->dev is not init, for this situation, we can get ns by
-    // sk->__sk_common.skc_net.net->ns.inum
+    // maybe the given dev is not init, for this situation, we can get netns by
+    // skb->sk->__sk_common.skc_net.net->ns.inum
     if (netns == 0) {
         struct sock *sk;
-        struct sock_common __sk_common;
-        struct ns_common *ns2;
+        struct sock_common *skc;
         member_read(&sk, skb, sk);
         if (sk != NULL) {
-            member_read(&__sk_common, sk, __sk_common);
-            ns2 = member_address(__sk_common.skc_net.net, ns);
-            member_read(&netns, ns2, inum);
+            skc = member_address(sk, __sk_common);
+            skc_net = member_address(skc, skc_net);
+            member_read(&net, skc_net, net);
+            ns = member_address(net, ns);
+            member_read(&netns, ns, inum);
         }
     }
 
@@ -367,8 +370,7 @@ union ___skb_pkt_type {
 
 INLINE u8 get_pkt_type(struct sk_buff *skb) {
     union ___skb_pkt_type type = {};
-    bpf_probe_read(&type.value, 1,
-                   ((char *)skb) + offsetof(struct sk_buff, __pkt_type_offset));
+    bpf_probe_read(&type.value, 1, member_address(skb, __pkt_type_offset));
     return type.pkt_type;
 }
 
@@ -438,16 +440,13 @@ INLINE void set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info,
     pkt_info->pkt_type = get_pkt_type(skb);
 
     pkt_info->ifname[0] = 0;
-    bpf_probe_read(&pkt_info->ifname, IFNAMSIZ, (char *)dev + offsetof(typeof(*dev), name));
+    bpf_probe_read(&pkt_info->ifname, IFNAMSIZ, member_address(dev, name));
     if (pkt_info->ifname[0] == 0) bpf_strncpy(pkt_info->ifname, "nil", IFNAMSIZ);
 }
 
 INLINE void set_ether_info(struct sk_buff *skb, struct l2_info_t *l2_info) {
-    char *dest;
-
     struct ethhdr *eh = (struct ethhdr *)get_l2_header(skb);
-    member_read(&dest, eh, h_dest);
-    bpf_probe_read(&l2_info->dest_mac, 6, dest);
+    bpf_probe_read(&l2_info->dest_mac, 6, member_address(eh, h_dest));
     member_read(&l2_info->l3_proto, eh, h_proto);
     l2_info->l3_proto = bpf_ntohs(l2_info->l3_proto);
 }
@@ -464,10 +463,8 @@ INLINE void set_ipv4_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
 
 INLINE void set_ipv6_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
     struct ipv6hdr *iph = (struct ipv6hdr *)get_l3_header(skb);
-    bpf_probe_read(&l3_info->saddr.v6addr, ADDRSIZE,
-                   (char *)iph + offsetof(struct ipv6hdr, saddr));
-    bpf_probe_read(&l3_info->daddr.v6addr, ADDRSIZE,
-                   (char *)iph + offsetof(struct ipv6hdr, daddr));
+    bpf_probe_read(&l3_info->saddr.v6addr, ADDRSIZE, member_address(iph, saddr));
+    bpf_probe_read(&l3_info->daddr.v6addr, ADDRSIZE, member_address(iph, daddr));
     member_read(&l3_info->tot_len, iph, payload_len);
     member_read(&l3_info->l4_proto, iph, nexthdr);
     l3_info->ip_version = get_ip_version(iph);
