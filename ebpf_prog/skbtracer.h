@@ -204,6 +204,7 @@ INLINE struct event_t *get_event_buf(void) {
     struct event_t *ev;
     ev = bpf_map_lookup_elem(&event_buf, &ev_buff_id);
     if (!ev) return NULL;
+    memset(ev, 0, sizeof(*ev));
     return ev;
 }
 
@@ -405,23 +406,18 @@ INLINE char *get_l3_header(struct sk_buff *skb) {
 
 INLINE char *get_l4_header(struct sk_buff *skb) {
     char *head;
-    u8 ip_version, ihl;
+    u8 ip_version;
     u16 mac_header, network_header, transport_header;
 
     member_read(&head, skb, head);
     member_read(&mac_header, skb, mac_header);
     member_read(&network_header, skb, network_header);
     if (network_header == 0) network_header = mac_header + MAC_HEADER_SIZE;
-    member_read(&transport_header, skb, transport_header);
-    if (transport_header == 0) {
-        ip_version = get_ip_version(head + network_header);
-        if (ip_version == 6)
-            transport_header = network_header + sizeof(struct ipv6hdr);
-        else {
-            ihl = get_ipv4_header_len(head + network_header);
-            transport_header = network_header + ihl;
-        }
-    }
+    ip_version = get_ip_version(head + network_header);
+    if (ip_version == 6)
+        transport_header = network_header + sizeof(struct ipv6hdr);
+    else
+        transport_header = network_header + get_ipv4_header_len(head + network_header);
     return head + transport_header;
 }
 
