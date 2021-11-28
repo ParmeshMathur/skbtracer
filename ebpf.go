@@ -75,12 +75,15 @@ func loadProgram(bpfProg []byte, c *Config) (*bpfProgram, error) {
 	bp.withCallstack = c.CallStack
 
 	err := bp.storeConfig(c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to store config, err: %w", err)
+	}
 
 	if err := bp.attachProbes(); err != nil {
 		return nil, fmt.Errorf("failed to attach kprobes, err: %w", err)
 	}
 
-	return &bp, err
+	return &bp, nil
 }
 
 func (p *bpfProgram) storeConfig(c *Config) error {
@@ -88,7 +91,7 @@ func (p *bpfProgram) storeConfig(c *Config) error {
 		return err
 	}
 
-	m := p.bpf.GetMapByName("tracer_cfg")
+	m := p.bpf.GetMapByName("skbtracer_cfg")
 	if m == nil {
 		return fmt.Errorf("bpf map(tracer_cfg) not found")
 	}
@@ -177,7 +180,7 @@ func (p *bpfProgram) getCallStack(id int32, e *Event) {
 		return
 	}
 
-	m := p.bpf.GetMapByName("stacks")
+	m := p.bpf.GetMapByName("skbtracer_stack")
 	if m == nil {
 		return
 	}
@@ -205,9 +208,9 @@ func (p *bpfProgram) attachProbes() error {
 	}
 
 	// get handles to perf event map
-	m := p.bpf.GetMapByName("route_event")
+	m := p.bpf.GetMapByName("skbtracer_event")
 	if m == nil {
-		return fmt.Errorf("bpf map(route_event) not found")
+		return fmt.Errorf("bpf map(skbtracer_event) not found")
 	}
 
 	// create perf events

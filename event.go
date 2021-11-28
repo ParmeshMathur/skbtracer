@@ -1,7 +1,6 @@
 package skbtracer
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
 	"unsafe"
@@ -9,41 +8,68 @@ import (
 	"github.com/dropbox/goebpf"
 )
 
-type bpfEvent struct {
-	FuncName [64]byte
-	Flags    byte
-	CPU      uint32
+type l2Info struct {
+	DestMac [6]byte
+	L3Proto uint16
+	l2pad   [4]byte
+}
 
-	KernelStackID int32
+type l3Info struct {
+	Saddr     [16]byte
+	Daddr     [16]byte
+	TotLen    uint16
+	IPVersion uint8
+	L4Proto   uint8
+	l3pad     [4]byte
+}
 
-	Ifname [16]byte
-	NetNS  uint32
+type l4Info struct {
+	Sport    uint16
+	Dport    uint16
+	TCPFlags uint8
+	l4pad    [3]byte
+}
 
-	Len       uint32
-	DestMac   [6]byte
-	IPVersion byte
-	L4Proto   byte
-	Saddr     [16]byte // network byte order
-	Daddr     [16]byte // network byte order
-	TotLen    [2]byte  // network byte order
-	ICMPID    [2]byte  // network byte order
-	ICMPSeq   [2]byte  // network byte order
-	Sport     [2]byte  // network byte order
-	Dport     [2]byte  // network byte order
-	TCPFlags  [2]byte  // network byte order
-	ICMPType  byte
-	PktType   byte
-	_pad1     byte
+type icmpInfo struct {
+	IcmpID   uint16
+	IcmpSeq  uint16
+	IcmpType uint8
+	icmpPad  [2]byte
+}
 
-	Pf        byte
+type iptablesInfo struct {
+	TableName [32]byte
 	Hook      uint32
 	Verdict   uint32
-	TableName [32]byte
 	IptDelay  uint64
+	Pf        uint8
+	iptPad    [7]byte
+}
 
-	Skb uint64
+type pktInfo struct {
+	Ifname  [16]byte
+	Len     uint32
+	CPU     uint32
+	Pid     uint32
+	NetNS   uint32
+	PktType uint8
+	pktPad  [7]byte
+}
 
-	StartNs uint64
+type bpfEvent struct {
+	FuncName      [32]byte
+	Skb           uint64
+	StartNs       uint64
+	KernelStackID int32
+	Flags         uint8
+	pad           [7]byte
+
+	pktInfo
+	l2Info
+	l3Info
+	l4Info
+	icmpInfo
+	iptablesInfo
 }
 
 const sizeofEvent = int(unsafe.Sizeof(bpfEvent{}))
@@ -66,8 +92,6 @@ func b2uint16(b [2]byte) uint16 {
 }
 
 func (e *bpfEvent) toEvent() *Event {
-	be := binary.BigEndian // network byte order is big endian
-
 	var saddr, daddr net.IP
 	if e.IPVersion == 4 {
 		saddr, daddr = net.IP(e.Saddr[:4]), net.IP(e.Daddr[:4])
@@ -85,16 +109,16 @@ func (e *bpfEvent) toEvent() *Event {
 		DestMac:   net.HardwareAddr(e.DestMac[:]),
 		Saddr:     saddr,
 		Daddr:     daddr,
-		Sport:     int(be.Uint16(e.Sport[:])),
-		Dport:     int(be.Uint16(e.Dport[:])),
+		Sport:     int(e.Sport),
+		Dport:     int(e.Dport),
 		IPVersion: e.IPVersion,
 		L4Proto:   e.L4Proto,
-		TotLen:    be.Uint16(e.TotLen[:]),
-		IcmpID:    b2uint16(e.ICMPID),
-		IcmpSeq:   b2uint16(e.ICMPSeq),
-		IcmpType:  e.ICMPType,
+		TotLen:    e.TotLen,
+		IcmpID:    e.IcmpID,
+		IcmpSeq:   e.IcmpSeq,
+		IcmpType:  e.IcmpType,
 		PktType:   e.PktType,
-		TCPFlags:  e.TCPFlags[0],
+		TCPFlags:  e.TCPFlags,
 		Pf:        e.Pf,
 		Hook:      e.Hook,
 		Verdict:   e.Verdict,
@@ -110,7 +134,6 @@ type Event struct {
 	FuncName string
 	Flags    uint8
 	CPU      uint32
-	_pad     [3]byte
 
 	Ifname string
 	NetNS  uint32

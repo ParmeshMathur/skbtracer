@@ -32,8 +32,6 @@ var rootCmd = cobra.Command{
 			return
 		}
 
-		fmt.Printf("run with config: %+v\n", gCfg.Config)
-
 		runBpf()
 	},
 }
@@ -50,7 +48,7 @@ func runBpf() {
 
 	// cleanup old probes
 	// if err := goebpf.CleanupProbes(); err != nil {
-	// 	log.Println(err)
+	// log.Println("failed to clean old probes, err:", err)
 	// }
 
 	ev, stop, err := skbtracer.Start(bpfProg, &gCfg.Config)
