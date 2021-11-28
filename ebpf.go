@@ -3,6 +3,7 @@ package skbtracer
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/dropbox/goebpf"
@@ -79,7 +80,7 @@ func loadProgram(bpfProg []byte, c *Config) (*bpfProgram, error) {
 		return nil, fmt.Errorf("failed to store config, err: %w", err)
 	}
 
-	if err := bp.attachProbes(); err != nil {
+	if err := bp.attachProbes(c); err != nil {
 		return nil, fmt.Errorf("failed to attach kprobes, err: %w", err)
 	}
 
@@ -197,13 +198,25 @@ func (p *bpfProgram) stopPerfEvents() {
 	eventLost = uint64(p.pe.EventsLost)
 }
 
-func (p *bpfProgram) attachProbes() error {
+func (p *bpfProgram) attachProbes(c *Config) error {
 
 	// attach all probe programs
 	for _, prog := range p.bpf.GetPrograms() {
+		progName:=prog.GetName()
+
+		// filter route
+		if c.NoRoute && strings.HasPrefix(progName, "k_") {
+			continue
+		}
+
+		// filter iptables
+		if !c.Iptable && strings.HasPrefix(progName, "ipt_") {
+			continue
+		}
+
 		if err := prog.Attach(nil); err != nil {
 			return fmt.Errorf("failed to attach prog(%s), err: %w",
-				prog.GetName(), err)
+				progName, err)
 		}
 	}
 

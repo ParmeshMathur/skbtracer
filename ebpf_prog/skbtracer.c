@@ -53,8 +53,6 @@ INLINE int do_trace(void *ctx, struct sk_buff *skb, const char *func_name,
                     void *netdev) {
     struct event_t *event;
 
-    if (filter_route()) return 0;
-
     event = get_event_buf();
     if (event == NULL) return 0;
 
@@ -302,8 +300,6 @@ INLINE int __ipt_do_table_out(struct pt_regs *ctx, struct sk_buff *skb) {
     __u32 verdict;
     __u64 ipt_delay;
 
-    if (filter_iptables()) return 0;
-
     pid = bpf_get_current_pid_tgid();
     args = bpf_map_lookup_elem(&skbtracer_ipt, &pid);
     if (args == NULL) return 0;
@@ -328,7 +324,7 @@ INLINE int __ipt_do_table_out(struct pt_regs *ctx, struct sk_buff *skb) {
 }
 
 SEC("kprobe/ipt_do_table")
-int k_ipt_do_table(struct pt_regs *ctx) {
+int ipt_k_do_table(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
     const GET_ARG(struct nf_hook_state *, state, args[1]);
@@ -340,7 +336,7 @@ int k_ipt_do_table(struct pt_regs *ctx) {
  * tricky: use ebx as the 1st parms, thus get skb
  */
 SEC("kretprobe/ipt_do_table")
-int kr_ipt_do_table(struct pt_regs *ctx) {
+int ipt_kr_do_table(struct pt_regs *ctx) {
     struct sk_buff *skb = (void *)ctx->bx;
     return __ipt_do_table_out(ctx, skb);
 }
