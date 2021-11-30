@@ -1,57 +1,28 @@
-package skbtracer
+package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dropbox/goebpf"
 )
-
-var (
-	eventReceived uint64
-	eventLost     uint64
-	eventAbnormal uint64
-)
-
-// EventStat is the statistics of bpf perf event.
-type EventStat struct {
-	Received uint64
-	Lost     uint64
-	Abnormal uint64
-}
-
-// GetEventStat you should get event stat after the cancel function calling.
-func GetEventStat() EventStat {
-	return EventStat{eventReceived, eventLost, eventAbnormal}
-}
 
 type bpfProgram struct {
 	bpf goebpf.System
 	pe  *goebpf.PerfEvents
 	wg  sync.WaitGroup
 
-	ev   chan *Event
-	stop chan struct{}
+	stopCh chan struct{}
 
-	withCallstack bool
+	err error
 }
 
-// Start loads bpf programs from bpfProg with config.
-// It loads the kprobes from bpfProg, and attaches the kprobes into the kernel.
-// Return an event channel and a cancel function, the cancel funtion is for
-// detaching the kprobes from the kernel.
-func Start(bpfProg []byte, c *Config) (<-chan *Event, func(), error) {
-	bp, err := loadProgram(bpfProg, c)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return bp.ev, bp.detachProbes, nil
-}
-
-func loadProgram(bpfProg []byte, c *Config) (*bpfProgram, error) {
+func newBpfProgram(bpfProg []byte) (*bpfProgram, error) {
 
 	// create system
 	bpf := goebpf.NewDefaultEbpfSystem()
@@ -61,35 +32,61 @@ func loadProgram(bpfProg []byte, c *Config) (*bpfProgram, error) {
 		return nil, fmt.Errorf("failed to load elf file, err: %w", err)
 	}
 
-	// load programs
-	for _, prog := range bpf.GetPrograms() {
-		if err := prog.Load(); err != nil {
-			return nil, fmt.Errorf("failed to load prog(%s), err: %w",
-				prog.GetName(), err)
-		}
-	}
-
 	var bp bpfProgram
 	bp.bpf = bpf
-	bp.ev = make(chan *Event)
-	bp.stop = make(chan struct{})
-	bp.withCallstack = c.CallStack
-
-	err := bp.storeConfig(c)
-	if err != nil {
-		return nil, fmt.Errorf("failed to store config, err: %w", err)
-	}
-
-	if err := bp.attachProbes(c); err != nil {
-		return nil, fmt.Errorf("failed to attach kprobes, err: %w", err)
-	}
+	bp.stopCh = make(chan struct{})
 
 	return &bp, nil
 }
 
-func (p *bpfProgram) storeConfig(c *Config) error {
-	if err := c.parse(); err != nil {
-		return err
+func (p *bpfProgram) start() error {
+
+	p.err = p.storeConfig()
+	p.err = p.loadPrograms()
+	p.err = p.attachProbes()
+	p.err = p.startPerfEvent()
+
+	return p.err
+}
+
+func (p *bpfProgram) filterBpfProg(progName string) bool {
+
+	// filter route
+	if cfg.NoRoute && strings.HasPrefix(progName, "k_") {
+		return true
+	}
+
+	// filter iptables
+	if !cfg.Iptable && strings.HasPrefix(progName, "ipt_") {
+		return true
+	}
+
+	return false
+}
+
+func (p *bpfProgram) loadPrograms() error {
+	if p.err != nil {
+		return p.err
+	}
+
+	for _, prog := range p.bpf.GetPrograms() {
+		progName := prog.GetName()
+		if p.filterBpfProg(progName) {
+			continue
+		}
+
+		if err := prog.Load(); err != nil {
+			return fmt.Errorf("failed to load prog(%s), err: %w",
+				progName, err)
+		}
+	}
+
+	return nil
+}
+
+func (p *bpfProgram) storeConfig() error {
+	if p.err != nil {
+		return p.err
 	}
 
 	m := p.bpf.GetMapByName("skbtracer_cfg")
@@ -116,17 +113,17 @@ func (p *bpfProgram) storeConfig(c *Config) error {
 		k    byte
 		v    uint64
 	}{
-		{"pid", 1, uint64(c.Pid)},
-		{"ip", 2, uint64(c.ip)},
-		{"port", 3, uint64(c.Port)},
-		{"icmpid", 4, uint64(c.IcmpID)},
-		{"dropstack", 5, bool2uint64(c.DropStack)},
-		{"callstack", 6, bool2uint64(c.CallStack)},
-		{"iptable", 7, bool2uint64(c.Iptable)},
-		{"noroute", 8, bool2uint64(c.NoRoute)},
-		{"keep", 9, bool2uint64(c.Keep)},
-		{"proto", 10, uint64(c.proto)},
-		{"netns", 11, uint64(c.NetNS)},
+		{"pid", 1, uint64(cfg.Pid)},
+		{"ip", 2, uint64(ip2uint32(cfg.IP))},
+		{"port", 3, uint64(cfg.Port)},
+		{"icmpid", 4, uint64(cfg.IcmpID)},
+		{"dropstack", 5, bool2uint64(cfg.DropStack)},
+		{"callstack", 6, bool2uint64(cfg.CallStack)},
+		{"iptable", 7, bool2uint64(cfg.Iptable)},
+		{"noroute", 8, bool2uint64(cfg.NoRoute)},
+		{"keep", 9, bool2uint64(cfg.Keep)},
+		{"proto", 10, uint64(cfg.proto)},
+		{"netns", 11, uint64(cfg.NetNS)},
 	}
 	for _, c := range configs {
 		if c.v != 0 {
@@ -139,78 +136,23 @@ func (p *bpfProgram) storeConfig(c *Config) error {
 	return nil
 }
 
-func (p *bpfProgram) startPerfEvents(events <-chan []byte) {
-	p.wg.Add(1)
-	go func(events <-chan []byte) {
-		defer p.wg.Done()
-
-		for {
-			var data []byte
-			select {
-			case <-p.stop:
-				return
-			case b, ok := <-events:
-				if !ok {
-					return
-				}
-				data = b
-			}
-
-			var ev bpfEvent
-			err := ev.unmarshal(data)
-			if err != nil {
-				eventAbnormal++
-				continue
-			}
-
-			e := ev.toEvent()
-			p.getCallStack(ev.KernelStackID, e)
-
-			select {
-			case p.ev <- e:
-			case <-p.stop:
-				return
-			}
-		}
-	}(events)
-}
-
-func (p *bpfProgram) getCallStack(id int32, e *Event) {
-
-	if !p.withCallstack || id < 0 {
-		return
+func ip2uint32(ip string) uint32 {
+	_ip := net.ParseIP(ip).To4()
+	if _ip == nil {
+		return 0
 	}
+	return binary.BigEndian.Uint32(_ip)
+}
 
-	m := p.bpf.GetMapByName("skbtracer_stack")
-	if m == nil {
-		return
+func (p *bpfProgram) attachProbes() error {
+	if p.err != nil {
+		return p.err
 	}
-
-	e.CallStack, _ = m.Lookup(id)
-}
-
-func (p *bpfProgram) stopPerfEvents() {
-	p.pe.Stop()
-	close(p.stop)
-	p.wg.Wait()
-
-	eventReceived = uint64(p.pe.EventsReceived)
-	eventLost = uint64(p.pe.EventsLost)
-}
-
-func (p *bpfProgram) attachProbes(c *Config) error {
 
 	// attach all probe programs
 	for _, prog := range p.bpf.GetPrograms() {
-		progName:=prog.GetName()
-
-		// filter route
-		if c.NoRoute && strings.HasPrefix(progName, "k_") {
-			continue
-		}
-
-		// filter iptables
-		if !c.Iptable && strings.HasPrefix(progName, "ipt_") {
+		progName := prog.GetName()
+		if p.filterBpfProg(progName) {
 			continue
 		}
 
@@ -220,6 +162,20 @@ func (p *bpfProgram) attachProbes(c *Config) error {
 		}
 	}
 
+	return nil
+}
+
+func (p *bpfProgram) startPerfEvent() (err error) {
+	if p.err != nil {
+		return p.err
+	}
+
+	defer func() {
+		if err != nil {
+			p.detachProbes()
+		}
+	}()
+
 	// get handles to perf event map
 	m := p.bpf.GetMapByName("skbtracer_event")
 	if m == nil {
@@ -227,7 +183,6 @@ func (p *bpfProgram) attachProbes(c *Config) error {
 	}
 
 	// create perf events
-	var err error
 	p.pe, err = goebpf.NewPerfEvents(m)
 	if err != nil {
 		return fmt.Errorf("failed to new perf-event, err: %w", err)
@@ -238,13 +193,103 @@ func (p *bpfProgram) attachProbes(c *Config) error {
 	}
 
 	// start event listeners
-	p.startPerfEvents(events)
+	p.recvPerfEvent(events)
 
 	return nil
 }
 
+func (p *bpfProgram) recvPerfEvent(events <-chan []byte) {
+
+	p.wg.Add(1)
+	go func(events <-chan []byte) {
+
+		fmt.Printf("%-10s %-20s %-12s %-6s %-18s %-18s %-6s %-54s %s\n",
+			"TIME", "SKB", "NETWORK_NS", "CPU", "INTERFACE", "DEST_MAC", "IP_LEN",
+			"PKT_INFO", "TRACE_INFO")
+
+		runForever := cfg.CatchCount == 0
+		for i := cfg.CatchCount; i > 0 || runForever; i-- {
+			var data []byte
+			select {
+			case <-p.stopCh:
+				break
+			case b, ok := <-events:
+				if !ok {
+					break
+				}
+				data = b
+			}
+
+			var ev perfEvent
+			err := ev.unmarshal(data)
+			if err != nil {
+				continue
+			}
+
+			fmt.Println(ev.output())
+
+			callStack := p.getCallStack(ev.KernelStackID)
+			if len(callStack) != 0 {
+				// TODO: deal callstack
+				_ = callStack
+			}
+
+			select {
+			case <-p.stopCh:
+				break
+			default:
+			}
+		}
+
+		go func() {
+			for range events {
+			}
+		}()
+
+		p.wg.Done()
+		p.stop()
+
+		fmt.Println()
+		fmt.Printf("%d event(s) received\n", p.pe.EventsReceived)
+		fmt.Printf("%d event(s) lost (e.g. small buffer, delays in processing)\n", p.pe.EventsLost)
+	}(events)
+}
+
+func (p *bpfProgram) getCallStack(id int32) []byte {
+
+	if !cfg.CallStack || id < 0 {
+		return nil
+	}
+
+	m := p.bpf.GetMapByName("skbtracer_stack")
+	if m == nil {
+		return nil
+	}
+
+	callStack, _ := m.Lookup(id)
+	return callStack
+}
+
+var stopOnce sync.Once
+var stopping uint32
+
+func (p *bpfProgram) stop() {
+
+	if !atomic.CompareAndSwapUint32(&stopping, 0, 1) {
+		return
+	}
+
+	stopOnce.Do(func() {
+
+		p.pe.Stop()
+		close(p.stopCh)
+		p.wg.Wait()
+
+		p.detachProbes()
+	})
+}
+
 func (p *bpfProgram) detachProbes() {
-	p.stopPerfEvents()
 	for _, prog := range p.bpf.GetPrograms() {
 		prog.Detach()
 		prog.Close()

@@ -1,12 +1,73 @@
-package skbtracer
+package main
 
 import (
 	"fmt"
 	"net"
+	"strings"
+	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/dropbox/goebpf"
 )
+
+const (
+	ethProtoIP   = 0x0800
+	ethProtoIPv6 = 0x86DD
+)
+
+const (
+	ipprotoICMP   = 1
+	ipprotoTCP    = 6
+	ipprotoUDP    = 17
+	ipprotoICMPv6 = 58
+)
+
+const (
+	routeEventIf      = 0x0001
+	routeEventIptable = 0x0002
+	routeEventDrop    = 0x0004
+	routeEventNew     = 0x0010
+)
+
+var (
+	nfVerdictName = []string{
+		"DROP",
+		"ACCEPT",
+		"STOLEN",
+		"QUEUE",
+		"REPEAT",
+		"STOP",
+	}
+
+	hookNames = []string{
+		"PREROUTING",
+		"INPUT",
+		"FORWARD",
+		"OUTPUT",
+		"POSTROUTING",
+	}
+
+	tcpFlagNames = []string{
+		"CWR",
+		"ECE",
+		"URG",
+		"ACK",
+		"PSH",
+		"RST",
+		"SYN",
+		"FIN",
+	}
+)
+
+func _get(names []string, idx uint32, defaultVal string) string {
+
+	if int(idx) < len(names) {
+		return names[idx]
+	}
+
+	return defaultVal
+}
 
 type l2Info struct {
 	DestMac [6]byte
@@ -56,7 +117,7 @@ type pktInfo struct {
 	pktPad  [7]byte
 }
 
-type bpfEvent struct {
+type perfEvent struct {
 	FuncName      [32]byte
 	Skb           uint64
 	StartNs       uint64
@@ -72,96 +133,160 @@ type bpfEvent struct {
 	iptablesInfo
 }
 
-const sizeofEvent = int(unsafe.Sizeof(bpfEvent{}))
+const sizeofEvent = int(unsafe.Sizeof(perfEvent{}))
 
-func (e *bpfEvent) unmarshal(data []byte) error {
+func (e *perfEvent) unmarshal(data []byte) error {
+
 	if sizeofEvent > len(data) {
 		return fmt.Errorf("event: not enough data to unmarshal, got %d bytes, expected %d bytes",
 			len(data), sizeofEvent)
 	}
 
-	ev := *(*bpfEvent)(unsafe.Pointer(&data[0]))
+	ev := *(*perfEvent)(unsafe.Pointer(&data[0]))
 	*e = ev
 	return nil
 }
 
-func b2uint16(b [2]byte) uint16 {
-	var v uint16
-	v = *(*uint16)(unsafe.Pointer(&b[0]))
-	return v
+var earliestTs = uint64(0)
+
+func (e *perfEvent) outputTimestamp() string {
+
+	if cfg.Timestamp {
+		if earliestTs == 0 {
+			earliestTs = e.StartNs
+		}
+		return fmt.Sprintf("%-7.6f", float64(e.StartNs-earliestTs)/1000000000.0)
+	}
+
+	return time.Unix(0, int64(e.StartNs)).Format("15:04:05")
 }
 
-func (e *bpfEvent) toEvent() *Event {
+func (e *perfEvent) outputTcpFlags() string {
+
+	var flags []string
+	tcpFlags := e.TCPFlags
+	for i := 0; i < len(tcpFlagNames); i++ {
+		if tcpFlags&(1<<i) != 0 {
+			flags = append(flags, tcpFlagNames[i])
+		}
+	}
+
+	return strings.Join(flags, ",")
+}
+
+func (e *perfEvent) outputPktInfo() string {
+
 	var saddr, daddr net.IP
-	if e.IPVersion == 4 {
-		saddr, daddr = net.IP(e.Saddr[:4]), net.IP(e.Daddr[:4])
+	if e.l2Info.L3Proto == ethProtoIP {
+		saddr = net.IP(e.Saddr[:4])
+		daddr = net.IP(e.Daddr[:4])
 	} else {
-		saddr, daddr = net.IP(e.Saddr[:]), net.IP(e.Daddr[:])
+		saddr = net.IP(e.Saddr[:])
+		daddr = net.IP(e.Daddr[:])
 	}
 
-	return &Event{
-		FuncName:  goebpf.NullTerminatedStringToString(e.FuncName[:]),
-		Flags:     e.Flags,
-		CPU:       e.CPU,
-		Ifname:    goebpf.NullTerminatedStringToString(e.Ifname[:]),
-		NetNS:     e.NetNS,
-		Len:       e.Len,
-		DestMac:   net.HardwareAddr(e.DestMac[:]),
-		Saddr:     saddr,
-		Daddr:     daddr,
-		Sport:     int(e.Sport),
-		Dport:     int(e.Dport),
-		IPVersion: e.IPVersion,
-		L4Proto:   e.L4Proto,
-		TotLen:    e.TotLen,
-		IcmpID:    e.IcmpID,
-		IcmpSeq:   e.IcmpSeq,
-		IcmpType:  e.IcmpType,
-		PktType:   e.PktType,
-		TCPFlags:  e.TCPFlags,
-		Pf:        e.Pf,
-		Hook:      e.Hook,
-		Verdict:   e.Verdict,
-		TableName: goebpf.NullTerminatedStringToString(e.TableName[:]),
-		IptDelay:  e.IptDelay,
-		Skb:       e.Skb,
-		StartNs:   e.StartNs,
+	if e.L4Proto == ipprotoTCP {
+		tcpFlags := e.outputTcpFlags()
+		if tcpFlags == "" {
+			return fmt.Sprintf("T:%s:%d->%s:%d",
+				saddr, e.Sport, daddr, e.Dport)
+		}
+		return fmt.Sprintf("T_%s:%s:%d->%s:%d", tcpFlags,
+			saddr, e.Sport, daddr, e.Dport)
+
+	} else if e.L4Proto == ipprotoUDP {
+		return fmt.Sprintf("U:%s:%d->%s:%d",
+			saddr, e.Sport, daddr, e.Dport)
+
+	} else if e.L4Proto == ipprotoICMP || e.L4Proto == ipprotoICMPv6 {
+		if e.IcmpType == 8 || e.IcmpType == 128 {
+			return fmt.Sprintf("I_request:%s->%s", saddr, daddr)
+		} else if e.IcmpType == 0 || e.IcmpType == 129 {
+			return fmt.Sprintf("I_reply:%s->%s", saddr, daddr)
+		} else {
+			return fmt.Sprintf("I:%s->%s", saddr, daddr)
+		}
+
+	} else {
+		return fmt.Sprintf("%d:%s->%s", e.L4Proto, saddr, daddr)
 	}
 }
 
-// Event an event is some information emited from bpf program.
-type Event struct {
-	FuncName string
-	Flags    uint8
-	CPU      uint32
+func (e *perfEvent) outputTraceInfo() string {
 
-	Ifname string
-	NetNS  uint32
+	iptables := ""
+	if e.Flags&routeEventIptable == routeEventIptable {
+		iptName := goebpf.NullTerminatedStringToString(e.TableName[:])
+		hook := _get(hookNames, e.Hook, "~UNK~")
+		verdict := _get(nfVerdictName, e.Verdict, "~UNK~")
+		iptables = fmt.Sprintf("pf=%d, table=%s hook=%s verdict=%s", e.Pf, iptName, hook, verdict)
+	}
 
-	Len          uint32
-	DestMac      net.HardwareAddr
-	Saddr, Daddr net.IP
-	Sport, Dport int
-	IPVersion    uint8
-	L4Proto      uint8
-	TotLen       uint16
-	IcmpID       uint16
-	IcmpSeq      uint16
-	IcmpType     uint8
-	TCPFlags     uint8
-	PktType      uint8
+	funcName := goebpf.NullTerminatedStringToString(e.FuncName[:])
+	pktType := e.outputPktType(e.PktType)
+	if iptables == "" {
+		return fmt.Sprintf("pkt_type=%s func=%s", pktType, funcName)
+	}
+	return fmt.Sprintf("pkt_type=%s iptables=[%s]", pktType, iptables)
+}
 
-	// iptable
-	Pf        uint8
-	_pad1     uint32
-	Hook      uint32
-	Verdict   uint32
-	TableName string
-	IptDelay  uint64
+func (e *perfEvent) outputPktType(pktType uint8) string {
 
-	Skb uint64
+	// See: https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/if_packet.h#L26
+	const (
+		PACKET_USER   = 6
+		PACKET_KERNEL = 7
+	)
+	pktTypes := map[uint8]string{
+		syscall.PACKET_HOST:      "HOST",
+		syscall.PACKET_BROADCAST: "BROADCAST",
+		syscall.PACKET_MULTICAST: "MULTICAST",
+		syscall.PACKET_OTHERHOST: "OTHERHOST",
+		syscall.PACKET_OUTGOING:  "OUTGOING",
+		syscall.PACKET_LOOPBACK:  "LOOPBACK",
+		PACKET_USER:              "USER",
+		PACKET_KERNEL:            "KERNEL",
+	}
+	if s, ok := pktTypes[pktType]; ok {
+		return s
+	}
+	return ""
+}
 
-	StartNs uint64
+func (e *perfEvent) output() string {
+	var s strings.Builder
 
-	CallStack []byte
+	// time
+	t := e.outputTimestamp()
+	s.WriteString(fmt.Sprintf("[%-8s] ", t))
+
+	// skb
+	s.WriteString(fmt.Sprintf("[0x%-16x] ", e.Skb))
+
+	// netns
+	s.WriteString(fmt.Sprintf("[%-10d] ", e.NetNS))
+
+	// cpu
+	s.WriteString(fmt.Sprintf("%-6d ", e.CPU))
+
+	// interface
+	ifname := goebpf.NullTerminatedStringToString(e.Ifname[:])
+	s.WriteString(fmt.Sprintf("%-18s ", ifname))
+
+	// dest mac
+	destMac := net.HardwareAddr(e.DestMac[:]).String()
+	s.WriteString(fmt.Sprintf("%-18s ", destMac))
+
+	// ip len
+	s.WriteString(fmt.Sprintf("%-6d ", e.TotLen))
+
+	// pkt info
+	pktInfo := e.outputPktInfo()
+	s.WriteString(fmt.Sprintf("%-54s ", pktInfo))
+
+	// trace info
+	traceInfo := e.outputTraceInfo()
+	s.WriteString(traceInfo)
+
+	return s.String()
 }

@@ -1,16 +1,20 @@
 GOCMD := go
 GOBUILD := $(GOCMD) build
 GOCLEAN := $(GOCMD) clean
+GOPS := /usr/local/bin/gops
+GOPSSTACK := $(GOPS) stack
 CLANG := clang
-CLANG_INCLUDE := -I./ebpf_prog
+CLANG_INCLUDE := -I./ebpf
 
-GO_SOURCE := ${PWD}/cmd/skbtracer/
+GO_SOURCE := ./*.go
 GO_BINARY := skbtracer
 
-EBPF_SOURCE := ebpf_prog/skbtracer.c
-EBPF_BINARY := cmd/skbtracer/skbtracer.elf
+EBPF_SOURCE := ebpf/skbtracer.c
+EBPF_BINARY := skbtracer.elf
 
-.PHONY: all debug rebuild build_ebpf build_go clean pahole objdump
+PID := $(shell pidof skbtracer)
+
+.PHONY: all debug rebuild build_ebpf build_go clean pahole objdump gops kill
 
 all: build_ebpf build_go
 
@@ -36,6 +40,12 @@ pahole:
 objdump:
 	$(CLANG) $(CLANG_INCLUDE) -O2 -g -target bpf -c $(EBPF_SOURCE)  -o $(EBPF_BINARY)
 	llvm-objdump -S $(EBPF_BINARY) > skbtracer_objdump.txt
+
+gops:
+	$(GOPSSTACK) $(PID) > skbtracer_gops.txt
+
+kill:
+	kill -9 $(PID)
 
 $(EBPF_BINARY): $(EBPF_SOURCE)
 	$(CLANG) $(CLANG_INCLUDE) -O2 -target bpf -c $^  -o $@
