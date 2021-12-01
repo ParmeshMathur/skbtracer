@@ -29,7 +29,8 @@ var rootCmd = cobra.Command{
 			return
 		}
 
-		runBpf()
+		runGops()
+		runEbpf()
 	},
 }
 
@@ -40,8 +41,8 @@ func main() {
 //go:embed skbtracer.elf
 var bpfProg []byte
 
-// runBpf attaches the kprobes and prints the kprobes' info.
-func runBpf() {
+// runEbpf attaches the kprobes and prints the kprobes' info.
+func runEbpf() {
 
 	// cleanup old probes
 	// if err := goebpf.CleanupProbes(); err != nil {

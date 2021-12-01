@@ -24,6 +24,7 @@ type Config struct {
 	Keep       bool
 	Time       bool
 	Timestamp  bool
+	Gops       string
 }
 
 var cfg Config
@@ -45,6 +46,7 @@ func init() {
 	fs.BoolVar(&cfg.Keep, "keep", false, "keep trace packet all lifetime")
 	fs.BoolVarP(&cfg.Time, "time", "T", true, "show HH:MM:SS timestamp")
 	fs.BoolVarP(&cfg.Timestamp, "timestamp", "t", false, "show timestamp in seconds at us resolution")
+	fs.StringVar(&cfg.Gops, "gops", "", "gops address")
 
 	fs.Lookup("dropstack").Deprecated = "not supported on Ubuntu 18.04.5 LTS with kernel 5.10.29-051029-generic"
 	fs.Lookup("callstack").Deprecated = "not implemented to print the function stack"

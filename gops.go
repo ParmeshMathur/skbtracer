@@ -7,8 +7,12 @@ import (
 	"github.com/google/gops/agent"
 )
 
-func init() {
-	listenAddr := ":6008"
+func runGops() {
+	if cfg.Gops == "" {
+		return
+	}
+
+	listenAddr := cfg.Gops
 	options := agent.Options{
 		Addr: listenAddr,
 	}
