@@ -8,6 +8,10 @@
 #ifndef __BPF_HELPERS_H
 #define __BPF_HELPERS_H
 
+// #include "bpf_helper_defs.h"
+
+static long (*bpf_probe_read_kernel)(void *dst, __u32 size, const void *unsafe_ptr) = (void *)113;
+
 // Standard types.
 // Due to tooons of dependencies in standard linux kernel headers
 // Define types explicitly.
@@ -27,17 +31,17 @@
 // A helper structure used by eBPF C program
 // to describe map attributes to BPF program loader
 struct bpf_map_def {
-  __u32 map_type;
-  __u32 key_size;
-  __u32 value_size;
-  __u32 max_entries;
-  __u32 map_flags;
-  // Array/Hash of maps use case: pointer to inner map template
-  void *inner_map_def;
-  // Define this to make map system wide ("object pinning")
-  // path could be anything, like '/sys/fs/bpf/foo'
-  // WARN: You must have BPF filesystem mounted on provided location
-  const char *persistent_path;
+    __u32 map_type;
+    __u32 key_size;
+    __u32 value_size;
+    __u32 max_entries;
+    __u32 map_flags;
+    // Array/Hash of maps use case: pointer to inner map template
+    void *inner_map_def;
+    // Define this to make map system wide ("object pinning")
+    // path could be anything, like '/sys/fs/bpf/foo'
+    // WARN: You must have BPF filesystem mounted on provided location
+    const char *persistent_path;
 };
 
 #define BPF_MAP_DEF_SIZE sizeof(struct bpf_map_def)
@@ -52,11 +56,10 @@ struct bpf_map_def {
  * XDP is handled seprately, see XDP_*.
  */
 
-
 // Socket Filter programs return code
 enum socket_filter_action {
-  SOCKET_FILTER_DENY = 0,
-  SOCKET_FILTER_ALLOW,
+    SOCKET_FILTER_DENY = 0,
+    SOCKET_FILTER_ALLOW,
 };
 
 // Kprobe required constants / structs
@@ -93,11 +96,9 @@ enum socket_filter_action {
 // XDP metadata - basically data packet
 // P.S. for some reason XDP programs uses 32bit pointers
 
-
 /* user accessible mirror of in-kernel sk_buff.
  * new fields can only be added to the end of this structure
  */
-
 
 // BPF helper functions supported on linux kernel 5.2+
 // clang-format off
@@ -596,11 +597,11 @@ static int (*bpf_xdp_adjust_head)(const void *ctx, int delta) = (void *) // NOLI
 // - Add #define DEBUG into your eBPF program before includes
 // - $ sudo cat /sys/kernel/debug/tracing/trace
 #ifdef DEBUG
-#define bpf_printk(fmt, ...)                                   \
-  ({                                                           \
-    char ____fmt[] = fmt;                                      \
-    bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__); \
-  })
+#define bpf_printk(fmt, ...)                                       \
+    ({                                                             \
+        char ____fmt[] = fmt;                                      \
+        bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__); \
+    })
 #else
 #define bpf_printk(fmt, ...)
 #endif
@@ -656,11 +657,12 @@ static int (*bpf_xdp_adjust_head)(const void *ctx, int delta) = (void *) // NOLI
 // This could be easily and nicely done using __attribute__ ((constructor))
 // Which is logically close to func init() int GO.
 struct __create_map_def {
-  const char *name;
-  void *map_data;  // Mock version only: holds head to single linked list of map
-                   // items
-  struct bpf_map_def *map_def;
-  SLIST_ENTRY(__create_map_def) next;
+    const char *name;
+    void *map_data; // Mock version only: holds head to single linked list of map
+                    // items
+    struct bpf_map_def *map_def;
+    SLIST_ENTRY(__create_map_def)
+    next;
 };
 
 // Declaration only. Definition held in mock_map package.
@@ -669,14 +671,14 @@ extern struct __maps_head_def *__maps_head;
 
 #define BPF_MAP_DEF(x) static struct bpf_map_def x
 
-#define BPF_MAP_ADD(x)                                          \
-  static __attribute__((constructor)) void __bpf_map_##x() {    \
-    static struct __create_map_def __bpf_map_entry_##x;         \
-    __bpf_map_entry_##x.name = #x;                              \
-    __bpf_map_entry_##x.map_data = NULL;                        \
-    __bpf_map_entry_##x.map_def = &x;                           \
-    SLIST_INSERT_HEAD(__maps_head, &__bpf_map_entry_##x, next); \
-  }
+#define BPF_MAP_ADD(x)                                              \
+    static __attribute__((constructor)) void __bpf_map_##x() {      \
+        static struct __create_map_def __bpf_map_entry_##x;         \
+        __bpf_map_entry_##x.name = #x;                              \
+        __bpf_map_entry_##x.map_data = NULL;                        \
+        __bpf_map_entry_##x.map_def = &x;                           \
+        SLIST_INSERT_HEAD(__maps_head, &__bpf_map_entry_##x, next); \
+    }
 
 // BPF helper prototypes - definition is up to mac/linux host program
 void *bpf_map_lookup_elem(const void *map, const void *key);
@@ -685,9 +687,9 @@ int bpf_map_update_elem(const void *map, const void *key, const void *value,
 int bpf_map_delete_elem(const void *map, const void *key);
 
 // bpf_printk() is just printf()
-#define bpf_printk(fmt, ...)  \
-  printf(fmt, ##__VA_ARGS__); \
-  fflush(stdout);
+#define bpf_printk(fmt, ...)    \
+    printf(fmt, ##__VA_ARGS__); \
+    fflush(stdout);
 
 // bpf_tail_call() is nothing: only relevant for BPF arch
 #define bpf_tail_call(ctx, map, index)
@@ -695,28 +697,28 @@ int bpf_map_delete_elem(const void *map, const void *key);
 // adjust_meta / ajdust_header are simple functions to move pointer
 
 UNUSED static int bpf_xdp_adjust_meta(struct xdp_md *ctx, int offset) {
-  // For unittests only - function returns error if data_meta points to data_end
-  // which never the case in real world
-  if (ctx->data_meta == ctx->data_end) {
-    return 1;
-  }
-  ctx->data_meta = (__u8 *)ctx->data_meta + offset;  // NOLINT
+    // For unittests only - function returns error if data_meta points to data_end
+    // which never the case in real world
+    if (ctx->data_meta == ctx->data_end) {
+        return 1;
+    }
+    ctx->data_meta = (__u8 *)ctx->data_meta + offset; // NOLINT
 
-  return 0;
+    return 0;
 }
 
 UNUSED static int bpf_xdp_adjust_head(struct xdp_md *ctx, int offset) {
-  ctx->data = (__u8 *)ctx->data + offset;  // NOLINT
+    ctx->data = (__u8 *)ctx->data + offset; // NOLINT
 
-  return 0;
+    return 0;
 }
 
 UNUSED static int bpf_perf_event_output(void *ctx, void *map, __u64 index,
                                         void *data, __u32 size) {
-  return 0;
+    return 0;
 }
 
-#endif  // of other than __BPF__
+#endif // of other than __BPF__
 
 // Finally make sure that all types have expected size regardless of platform
 static_assert(sizeof(__u8) == 1, "wrong_u8_size");
@@ -725,4 +727,3 @@ static_assert(sizeof(__u32) == 4, "wrong_u32_size");
 static_assert(sizeof(__u64) == 8, "wrong_u64_size");
 
 #endif
-

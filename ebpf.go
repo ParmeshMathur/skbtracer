@@ -203,8 +203,8 @@ func (p *bpfProgram) recvPerfEvent(events <-chan []byte) {
 	p.wg.Add(1)
 	go func(events <-chan []byte) {
 
-		fmt.Printf("%-10s %-20s %-12s %-6s %-18s %-18s %-6s %-54s %s\n",
-			"TIME", "SKB", "NETWORK_NS", "CPU", "INTERFACE", "DEST_MAC", "IP_LEN",
+		fmt.Printf("%-10s %-20s %-12s %-8s %-6s %-18s %-18s %-6s %-54s %s\n",
+			"TIME", "SKB", "NETWORK_NS", "PID", "CPU", "INTERFACE", "DEST_MAC", "IP_LEN",
 			"PKT_INFO", "TRACE_INFO")
 
 		runForever := cfg.CatchCount == 0
@@ -248,10 +248,6 @@ func (p *bpfProgram) recvPerfEvent(events <-chan []byte) {
 
 		p.wg.Done()
 		p.stop()
-
-		fmt.Println()
-		fmt.Printf("%d event(s) received\n", p.pe.EventsReceived)
-		fmt.Printf("%d event(s) lost (e.g. small buffer, delays in processing)\n", p.pe.EventsLost)
 	}(events)
 }
 
@@ -294,4 +290,11 @@ func (p *bpfProgram) detachProbes() {
 		prog.Detach()
 		prog.Close()
 	}
+}
+
+func (p *bpfProgram) printStat() {
+
+	fmt.Println()
+	fmt.Printf("%d event(s) received\n", p.pe.EventsReceived)
+	fmt.Printf("%d event(s) lost (e.g. small buffer, delays in processing)\n", p.pe.EventsLost)
 }

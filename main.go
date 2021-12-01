@@ -58,6 +58,7 @@ func runBpf() {
 		fmt.Println("failed to start, err:", err)
 		return
 	}
+	defer bpf.printStat()
 
 	// wait until Ctrl+C pressed
 	sig := make(chan os.Signal, 1)

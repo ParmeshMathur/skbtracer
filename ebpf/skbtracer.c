@@ -4,16 +4,15 @@
  * Common tracepoint handler. Detect IPv4/IPv6 and
  * emit event with address, interface and namespace.
  */
-INLINE bool do_trace_skb(struct event_t *event, void *ctx, struct sk_buff *skb,
-                         void *netdev) {
+INLINE bool do_trace_skb(struct event_t *event, void *ctx, struct sk_buff *skb) {
     bool ret = true;
 
-    if (filter_pid() || filter_netns(skb, netdev) || filter_l3_and_l4_info(skb))
+    if (filter_pid() || filter_netns(skb) || filter_l3_and_l4_info(skb))
         return false;
 
     event->flags |= SKBTRACER_EVENT_IF;
     set_event_info(skb, ctx, event);
-    set_pkt_info(skb, &event->pkt_info, netdev);
+    set_pkt_info(skb, &event->pkt_info);
     set_ether_info(skb, &event->l2_info);
 
     switch (event->l2_info.l3_proto) {
@@ -49,14 +48,13 @@ INLINE bool do_trace_skb(struct event_t *event, void *ctx, struct sk_buff *skb,
     return ret;
 }
 
-INLINE int do_trace(void *ctx, struct sk_buff *skb, const char *func_name,
-                    void *netdev) {
+INLINE int do_trace(void *ctx, struct sk_buff *skb, const char *func_name) {
     struct event_t *event;
 
     event = get_event_buf();
     if (event == NULL) return 0;
 
-    if (!do_trace_skb(event, ctx, skb, netdev)) return 0;
+    if (!do_trace_skb(event, ctx, skb)) return 0;
 
     bpf_strncpy(event->func_name, func_name, FUNCNAME_MAX_LEN);
     bpf_perf_event_output(ctx, &skbtracer_event, BPF_F_CURRENT_CPU, event,
@@ -76,37 +74,35 @@ SEC("kprobe/netif_rx")
 int k_netif_rx(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
-    return do_trace(ctx, skb, "netif_rx", NULL);
+    return do_trace(ctx, skb, "netif_rx");
 }
 
 SEC("kprobe/__netif_receive_skb")
 int k_nif_rcv_skb(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
-    return do_trace(ctx, skb, "__netif_receive_skb", NULL);
+    return do_trace(ctx, skb, "__netif_receive_skb");
 }
 
 SEC("kprobe/tpacket_rcv")
 int k_tpacket_rcv(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
-    GET_ARG(struct net_device *, orig_dev, args[3]);
-    return do_trace(ctx, skb, "tpacket_rcv", orig_dev);
+    return do_trace(ctx, skb, "tpacket_rcv");
 }
 
 SEC("kprobe/packet_rcv")
 int k_packet_rcv(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
-    GET_ARG(struct net_device *, orig_dev, args[3]);
-    return do_trace(ctx, skb, "packet_rcv", orig_dev);
+    return do_trace(ctx, skb, "packet_rcv");
 }
 
 SEC("kprobe/napi_gro_receive")
 int k_napi_gro_rcv(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "napi_gro_receive", NULL);
+    return do_trace(ctx, skb, "napi_gro_receive");
 }
 
 /*
@@ -119,7 +115,7 @@ SEC("kprobe/__dev_queue_xmit")
 int k_dev_q_xmit(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
-    return do_trace(ctx, skb, "__dev_queue_xmit", NULL);
+    return do_trace(ctx, skb, "__dev_queue_xmit");
 }
 
 /*
@@ -145,84 +141,84 @@ SEC("kprobe/br_handle_frame_finish")
 int k_br_handle_ff(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "br_handle_frame_finish", NULL);
+    return do_trace(ctx, skb, "br_handle_frame_finish");
 }
 
 SEC("kprobe/br_nf_pre_routing")
 int k_br_nf_prero(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "br_nf_pre_routing", NULL);
+    return do_trace(ctx, skb, "br_nf_pre_routing");
 }
 
 SEC("kprobe/br_nf_pre_routing_finish")
 int k_brnf_prero_f(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "br_nf_pre_routing_finish", NULL);
+    return do_trace(ctx, skb, "br_nf_pre_routing_finish");
 }
 
 SEC("kprobe/br_pass_frame_up")
 int k_br_pass_f_up(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
-    return do_trace(ctx, skb, "br_pass_frame_up", NULL);
+    return do_trace(ctx, skb, "br_pass_frame_up");
 }
 
 SEC("kprobe/br_netif_receive_skb")
 int k_br_nif_rcv(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "br_netif_receive_skb", NULL);
+    return do_trace(ctx, skb, "br_netif_receive_skb");
 }
 
 SEC("kprobe/br_forward")
 int k_br_forward(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "br_forward", NULL);
+    return do_trace(ctx, skb, "br_forward");
 }
 
 SEC("kprobe/__br_forward")
 int k___br_fwd(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "__br_forward", NULL);
+    return do_trace(ctx, skb, "__br_forward");
 }
 
 SEC("kprobe/br_forward_finish")
 int k_br_fwd_f(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "br_forward_finish", NULL);
+    return do_trace(ctx, skb, "br_forward_finish");
 }
 
 SEC("kprobe/br_nf_forward_ip")
 int k_br_nf_fwd_ip(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "br_nf_forward_ip", NULL);
+    return do_trace(ctx, skb, "br_nf_forward_ip");
 }
 
 SEC("kprobe/br_nf_forward_finish")
 int k_br_nf_fwd_fin(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "br_nf_forward_finish", NULL);
+    return do_trace(ctx, skb, "br_nf_forward_finish");
 }
 
 SEC("kprobe/br_nf_post_routing")
 int k_br_nf_post_ro(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "br_nf_post_routing", NULL);
+    return do_trace(ctx, skb, "br_nf_post_routing");
 }
 
 SEC("kprobe/br_nf_dev_queue_xmit")
 int k_br_nf_q_xmit(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "br_nf_dev_queue_xmit", NULL);
+    return do_trace(ctx, skb, "br_nf_dev_queue_xmit");
 }
 
 /*
@@ -239,28 +235,28 @@ SEC("kprobe/ip_rcv")
 int k_ip_rcv(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
-    return do_trace(ctx, skb, "ip_rcv", NULL);
+    return do_trace(ctx, skb, "ip_rcv");
 }
 
 SEC("kprobe/ip_rcv_finish")
 int k_ip_rcv_finish(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "ip_rcv_finish", NULL);
+    return do_trace(ctx, skb, "ip_rcv_finish");
 }
 
 SEC("kprobe/ip_output")
 int k_ip_output(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "ip_output", NULL);
+    return do_trace(ctx, skb, "ip_output");
 }
 
 SEC("kprobe/ip_finish_output")
 int k_ip_finish_out(struct pt_regs *ctx) {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[2]);
-    return do_trace(ctx, skb, "ip_finish_output", NULL);
+    return do_trace(ctx, skb, "ip_finish_output");
 }
 
 #if 0
@@ -269,7 +265,7 @@ int k_deliver_clone(struct pt_regs *ctx)
 {
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "deliver_clone", NULL);
+    return do_trace(ctx, skb, "deliver_clone");
 }
 #endif
 
@@ -308,7 +304,7 @@ INLINE int __ipt_do_table_out(struct pt_regs *ctx, struct sk_buff *skb) {
     event = get_event_buf();
     if (event == NULL) return 0;
 
-    if (!do_trace_skb(event, ctx, args->skb, NULL)) return 0;
+    if (!do_trace_skb(event, ctx, args->skb)) return 0;
 
     event->flags |= SKBTRACER_EVENT_IPTABLE;
 

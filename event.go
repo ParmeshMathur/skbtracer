@@ -266,6 +266,9 @@ func (e *perfEvent) output() string {
 	// netns
 	s.WriteString(fmt.Sprintf("[%-10d] ", e.NetNS))
 
+	// pid
+	s.WriteString(fmt.Sprintf("%-8d ", e.Pid))
+
 	// cpu
 	s.WriteString(fmt.Sprintf("%-6d ", e.CPU))
 

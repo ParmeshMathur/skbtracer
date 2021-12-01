@@ -38,19 +38,20 @@ Flags:
 
 ```bash
 $ sudo ./skbtracer -c 10
-TIME       NETWORK_NS   CPU    INTERFACE          DEST_MAC           IP_LEN PKT_INFO                                               TRACE_INFO
-[13:43:45] [0         ] 3      nil                00:00:00:00:00:00  168    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b3ae0.0:ip_output
-[13:43:45] [0         ] 3      ens18              00:00:00:00:00:00  168    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b3ae0.0:ip_finish_output
-[13:43:45] [0         ] 3      ens18              00:00:00:00:00:00  168    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b3ae0.0:__dev_queue_xmit
-[13:43:45] [0         ] 3      nil                00:00:00:00:00:00  248    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b36e0.0:ip_output
-[13:43:45] [0         ] 3      ens18              00:00:00:00:00:00  248    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b36e0.0:ip_finish_output
-[13:43:45] [0         ] 3      ens18              00:00:00:00:00:00  248    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b36e0.0:__dev_queue_xmit
-[13:43:45] [0         ] 3      nil                00:00:00:00:00:00  120    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b2ce0.0:ip_output
-[13:43:45] [0         ] 3      ens18              00:00:00:00:00:00  120    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b2ce0.0:ip_finish_output
-[13:43:45] [0         ] 3      ens18              00:00:00:00:00:00  120    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b2ce0.0:__dev_queue_xmit
-[13:43:45] [0         ] 3      nil                00:00:00:00:00:00  120    T_ACK,PSH:10.0.1.10:22->10.0.4.15:55343                ffff9a271b1b30e0.0:ip_output
+TIME       SKB                  NETWORK_NS   PID      CPU    INTERFACE          DEST_MAC           IP_LEN PKT_INFO                                               TRACE_INFO
+[14:08:57] [0xffff8d8d1426ca00] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  146    U:192.168.0.1:53->10.0.2.15:55663                      pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c800] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  44     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c000] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  40     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c000] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  1500   T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c800] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  1500   T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c800] [4026531992] 60373    3      enp0s3             08:00:27:99:a7:c5  1500   T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c200] [4026531992] 60373    3      enp0s3             08:00:27:99:a7:c5  938    T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c200] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  40     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c200] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  160    T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[14:08:57] [0xffff8d8d1426c100] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  40     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+Printed 10 events, exiting...
 
-15 event(s) received
+10 event(s) received
 0 event(s) lost (e.g. small buffer, delays in processing)
 ```
 
