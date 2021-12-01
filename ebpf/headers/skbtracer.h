@@ -303,10 +303,9 @@ INLINE void bpf_strncpy(char *dst, const char *src, int n) {
 INLINE u32 get_netns(struct sk_buff *skb) {
     u32 netns;
 
-    struct net_device *dev = BPF_CORE_READ(skb, dev);
     // Get netns inode. The code below is equivalent to: netns =
-    // dev->nd_net.net->ns.inum
-    netns = BPF_CORE_READ(dev, nd_net.net, ns.inum);
+    // skb->dev->nd_net.net->ns.inum
+    netns = BPF_CORE_READ(skb, dev, nd_net.net, ns.inum);
 
     // maybe the skb->dev is not init, for this situation, we can get netns inode by
     // skb->sk->__sk_common.skc_net.net->ns.inum
