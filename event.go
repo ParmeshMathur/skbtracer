@@ -87,8 +87,8 @@ type l3Info struct {
 type l4Info struct {
 	Sport    uint16
 	Dport    uint16
-	TCPFlags uint8
-	l4pad    [3]byte
+	TCPFlags uint16
+	l4pad    [2]byte
 }
 
 type icmpInfo struct {
@@ -164,7 +164,7 @@ func (e *perfEvent) outputTimestamp() string {
 func (e *perfEvent) outputTcpFlags() string {
 
 	var flags []string
-	tcpFlags := e.TCPFlags
+	tcpFlags := uint8(e.TCPFlags >> 8)
 	for i := 0; i < len(tcpFlagNames); i++ {
 		if tcpFlags&(1<<i) != 0 {
 			flags = append(flags, tcpFlagNames[i])

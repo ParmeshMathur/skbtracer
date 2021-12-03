@@ -4,57 +4,58 @@
  * Common tracepoint handler. Detect IPv4/IPv6 and
  * emit event with address, interface and namespace.
  */
-INLINE bool do_trace_skb(struct event_t *event, void *ctx, struct sk_buff *skb) {
-    bool ret = true;
+INLINE bool do_trace_skb(struct event_t *event, struct config *cfg,
+                         struct pt_regs *ctx, struct sk_buff *skb) {
+    unsigned char *l3_header;
+    u8 ip_version, l4_proto;
 
-    if (filter_pid() || filter_netns(skb) || filter_l3_and_l4_info(skb))
+    if (filter_pid(cfg) || filter_netns(cfg, skb) || filter_l3_and_l4_info(cfg, skb))
         return false;
 
+    if (!filter_callstack(cfg))
+        set_callstack(event, ctx);
+
     event->flags |= SKBTRACER_EVENT_IF;
-    set_event_info(skb, ctx, event);
+    set_event_info(skb, event);
     set_pkt_info(skb, &event->pkt_info);
     set_ether_info(skb, &event->l2_info);
 
-    switch (event->l2_info.l3_proto) {
-    case ETH_P_IP:
+    l3_header = get_l3_header(skb);
+    ip_version = get_ip_version(l3_header);
+    if (ip_version == 4) {
+        event->l2_info.l3_proto = ETH_P_IP;
         set_ipv4_info(skb, &event->l3_info);
-        break;
-    case ETH_P_IPV6:
+    } else if (ip_version == 6) {
+        event->l2_info.l3_proto = ETH_P_IPV6;
         set_ipv6_info(skb, &event->l3_info);
-        break;
-    default:
-        ret = false;
-        break;
+    } else {
+        return false;
     }
 
-    if (!ret) return false;
-
-    switch (event->l3_info.l4_proto) {
-    case IPPROTO_TCP:
+    l4_proto = event->l3_info.l4_proto;
+    if (l4_proto == IPPROTO_TCP) {
         set_tcp_info(skb, &event->l4_info);
-        break;
-    case IPPROTO_UDP:
+    } else if (l4_proto == IPPROTO_UDP) {
         set_udp_info(skb, &event->l4_info);
-        break;
-    case IPPROTO_ICMP:
-    case IPPROTO_ICMPV6:
+    } else if (l4_proto == IPPROTO_ICMP || l4_proto == IPPROTO_ICMPV6) {
         set_icmp_info(skb, &event->icmp_info);
-        break;
-    default:
-        ret = false;
-        break;
+    } else {
+        return false;
     }
 
-    return ret;
+    return true;
 }
 
-INLINE int do_trace(void *ctx, struct sk_buff *skb, const char *func_name) {
-    struct event_t *event;
+INLINE int do_trace(struct pt_regs *ctx, struct sk_buff *skb, const char *func_name) {
+    u32 index = 0;
+    struct config *cfg = NULL;
 
-    event = get_event_buf();
-    if (event == NULL) return 0;
+    cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
+    if (cfg == NULL) return 0;
 
-    if (!do_trace_skb(event, ctx, skb)) return 0;
+    GET_EVENT_BUF();
+
+    if (!do_trace_skb(event, cfg, ctx, skb)) return 0;
 
     bpf_strncpy(event->func_name, func_name, FUNCNAME_MAX_LEN);
     bpf_perf_event_output(ctx, &skbtracer_event, BPF_F_CURRENT_CPU, event,
@@ -272,9 +273,7 @@ int k_deliver_clone(struct pt_regs *ctx)
 INLINE int __ipt_do_table_in(struct pt_regs *ctx, struct sk_buff *skb,
                              const struct nf_hook_state *state,
                              struct xt_table *table) {
-    __u32 pid;
-
-    if (filter_iptables()) return 0;
+    u32 pid;
 
     struct ipt_do_table_args args = {
         .skb = skb,
@@ -290,21 +289,24 @@ INLINE int __ipt_do_table_in(struct pt_regs *ctx, struct sk_buff *skb,
 };
 
 INLINE int __ipt_do_table_out(struct pt_regs *ctx, struct sk_buff *skb) {
-    struct event_t *event;
+    u32 pid;
+    u32 verdict;
+    u64 ipt_delay;
+    u32 index = 0;
+    struct config *cfg = NULL;
     struct ipt_do_table_args *args;
-    __u32 pid;
-    __u32 verdict;
-    __u64 ipt_delay;
 
     pid = bpf_get_current_pid_tgid();
     args = bpf_map_lookup_elem(&skbtracer_ipt, &pid);
     if (args == NULL) return 0;
     bpf_map_delete_elem(&skbtracer_ipt, &pid);
 
-    event = get_event_buf();
-    if (event == NULL) return 0;
+    GET_EVENT_BUF();
 
-    if (!do_trace_skb(event, ctx, args->skb)) return 0;
+    cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
+    if (cfg == NULL) return 0;
+
+    if (!do_trace_skb(event, cfg, ctx, args->skb)) return 0;
 
     event->flags |= SKBTRACER_EVENT_IPTABLE;
 
@@ -337,28 +339,31 @@ int ipt_kr_do_table(struct pt_regs *ctx) {
     return __ipt_do_table_out(ctx, skb);
 }
 
-#if 0
 SEC("kprobe/__kfree_skb") // failed to load on Ubuntu 18.04.5 LTS with kernel 5.10.29-051029-generic
-int k___kfree_skb(struct pt_regs *ctx, struct sk_buff *skb)
-{
-    struct event_t event = {};
-    __u64 _cfg_dropstack = get_cfg_dropstack();
+int k___kfree_skb(struct pt_regs *ctx) {
+    GET_ARGS();
+    GET_ARG(struct sk_buff *, skb, args[0]);
 
-    if (0 != _cfg_dropstack)
+    GET_EVENT_BUF();
+
+    u32 index = 0;
+    struct config *cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
+
+    if (!filter_dropstack(cfg))
+        set_callstack(event, ctx);
+
+    if (!do_trace_skb(event, cfg, ctx, skb))
         return 0;
 
-    if (!do_trace_skb(&event, ctx, skb, NULL))
-        return 0;
-
-    event.flags |= SKBTRACER_EVENT_DROP;
-    event.start_ns = bpf_ktime_get_ns();
-    bpf_strncpy(event.func_name, __func__+8, FUNCNAME_MAX_LEN);
-    get_stack(ctx, &event);
+    event->flags |= SKBTRACER_EVENT_DROP;
+    event->start_ns = bpf_ktime_get_ns();
+    bpf_strncpy(event->func_name, "__kfree_skb", FUNCNAME_MAX_LEN);
     bpf_perf_event_output(ctx, &skbtracer_event, BPF_F_CURRENT_CPU,
-        &event, sizeof(event));
+                          event, sizeof(event));
     return 0;
 }
 
+#if 0
 SEC("kprobe/ip6t_do_table")
 int k_ip6t_do_table(struct pt_regs *ctx)
 {

@@ -77,45 +77,25 @@ INLINE void get_args(struct pt_regs *ctx, unsigned long *args) {
 
 #define GET_ARG(type, name, arg) type name = (type)arg
 
+struct config {
+    u32 netns;
+    u32 pid;
+    u32 ip;
+    u16 port;
+    u16 icmpid;
+    u8 dropstack;
+    u8 callstack;
+    u8 keep;
+    u8 proto;
+};
+
 BPF_MAP_DEF(skbtracer_cfg) = {
-    .map_type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(u8),
-    .value_size = sizeof(u64),
-    .max_entries = 8,
+    .map_type = BPF_MAP_TYPE_ARRAY,
+    .key_size = sizeof(u32),
+    .value_size = sizeof(struct config),
+    .max_entries = 1,
 };
 BPF_MAP_ADD(skbtracer_cfg);
-
-#define cfg_pid 1
-#define cfg_ip 2
-#define cfg_port 3
-#define cfg_icmpid 4
-#define cfg_dropstack 5
-#define cfg_callstack 6
-#define cfg_iptable 7
-#define cfg_noroute 8
-#define cfg_keep 9
-#define cfg_proto 10
-#define cfg_netns 11
-
-#define DEF_GET_CFG(name)                              \
-    INLINE u64 get_cfg_##name(void) {                  \
-        u8 key = cfg_##name;                           \
-        u64 *v;                                        \
-        v = bpf_map_lookup_elem(&skbtracer_cfg, &key); \
-        return NULL == v ? 0 : *v;                     \
-    }
-
-DEF_GET_CFG(pid)
-DEF_GET_CFG(ip)
-DEF_GET_CFG(port)
-DEF_GET_CFG(icmpid)
-DEF_GET_CFG(dropstack)
-DEF_GET_CFG(callstack)
-DEF_GET_CFG(iptable)
-DEF_GET_CFG(noroute)
-DEF_GET_CFG(keep)
-DEF_GET_CFG(proto)
-DEF_GET_CFG(netns)
 
 union addr {
     u32 v4addr;
@@ -144,8 +124,8 @@ struct l3_info_t {
 struct l4_info_t {
     u16 sport;
     u16 dport;
-    u8 tcpflags;
-    u8 pad[3];
+    u16 tcpflags;
+    u8 pad[2];
 };
 
 struct icmp_info_t {
@@ -207,10 +187,15 @@ INLINE struct event_t *get_event_buf(void) {
     return ev;
 }
 
-#define SKBTRACER_EVENT_IF 0x0001
-#define SKBTRACER_EVENT_IPTABLE 0x0002
-#define SKBTRACER_EVENT_DROP 0x0004
-#define SKBTRACER_EVENT_NEW 0x0010
+#define GET_EVENT_BUF()      \
+    struct event_t *event;   \
+    event = get_event_buf(); \
+    if (event == NULL) return 0
+
+#define SKBTRACER_EVENT_IF 0x01
+#define SKBTRACER_EVENT_IPTABLE 0x02
+#define SKBTRACER_EVENT_DROP 0x04
+#define SKBTRACER_EVENT_NEW 0x10
 
 BPF_MAP_DEF(skbtracer_event) = {
     .map_type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
@@ -240,51 +225,6 @@ BPF_MAP_DEF(skbtracer_stack) = {
 };
 BPF_MAP_ADD(skbtracer_stack);
 
-enum {
-    __TCP_FLAG_CWR,
-    __TCP_FLAG_ECE,
-    __TCP_FLAG_URG,
-    __TCP_FLAG_ACK,
-    __TCP_FLAG_PSH,
-    __TCP_FLAG_RST,
-    __TCP_FLAG_SYN,
-    __TCP_FLAG_FIN
-};
-
-#define TCP_FLAGS_INIT(new_flags, orig_flags, flag) \
-    do {                                            \
-        if (orig_flags & flag) {                    \
-            new_flags |= (1U << __##flag);          \
-        }                                           \
-    } while (0)
-
-#define init_tcpflags_bits(new_flags, orig_flags)            \
-    ({                                                       \
-        new_flags = 0;                                       \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_CWR); \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_ECE); \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_URG); \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_ACK); \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_PSH); \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_RST); \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_SYN); \
-        TCP_FLAGS_INIT(new_flags, orig_flags, TCP_FLAG_FIN); \
-    })
-
-INLINE void get_stack(struct pt_regs *ctx, struct event_t *event) {
-    event->kernel_stack_id = bpf_get_stackid(ctx, &skbtracer_stack, 0);
-    return;
-}
-
-INLINE int _has_callstack(void) {
-    return 0 != get_cfg_callstack();
-}
-
-#define CALL_STACK(ctx, event)                       \
-    do {                                             \
-        if (_has_callstack()) get_stack(ctx, event); \
-    } while (0)
-
 INLINE void bpf_strncpy(char *dst, const char *src, int n) {
     int i = 0, j;
 #define CPY(n)                       \
@@ -309,8 +249,11 @@ INLINE u32 get_netns(struct sk_buff *skb) {
 
     // maybe the skb->dev is not init, for this situation, we can get netns inode by
     // skb->sk->__sk_common.skc_net.net->ns.inum
-    if (netns == 0)
-        netns = BPF_CORE_READ(skb, sk, __sk_common.skc_net.net, ns.inum);
+    if (netns == 0) {
+        struct sock *sk = BPF_CORE_READ(skb, sk);
+        if (sk != NULL)
+            netns = BPF_CORE_READ(sk, __sk_common.skc_net.net, ns.inum);
+    }
 
     return netns;
 }
@@ -353,28 +296,32 @@ INLINE unsigned char *get_l2_header(struct sk_buff *skb) {
 }
 
 INLINE unsigned char *get_l3_header(struct sk_buff *skb) {
-    unsigned char *l2_header = get_l2_header(skb);
+    unsigned char *head = BPF_CORE_READ(skb, head);
+    u16 mac_header = BPF_CORE_READ(skb, mac_header);
     u16 network_header = BPF_CORE_READ(skb, network_header);
-    if (network_header == 0) network_header = MAC_HEADER_SIZE;
-    return l2_header + network_header;
+    if (network_header == 0) network_header = mac_header + MAC_HEADER_SIZE;
+    return head + network_header;
 }
 
 INLINE unsigned char *get_l4_header(struct sk_buff *skb) {
+    u16 transport_size = 0;
     unsigned char *l3_header = get_l3_header(skb);
-    u16 transport_header = BPF_CORE_READ(skb, transport_header);
     u8 ip_version = get_ip_version(l3_header);
     if (ip_version == 6)
-        transport_header = sizeof(struct ipv6hdr);
+        transport_size = sizeof(struct ipv6hdr);
     else
-        transport_header = get_ipv4_header_len(l3_header);
-    return l3_header + transport_header;
+        transport_size = get_ipv4_header_len(l3_header);
+    return l3_header + transport_size;
 }
 
-INLINE void set_event_info(struct sk_buff *skb, struct pt_regs *ctx,
-                           struct event_t *ev) {
+INLINE void set_event_info(struct sk_buff *skb, struct event_t *ev) {
     ev->skb = (u64)skb;
     ev->start_ns = bpf_ktime_get_ns();
-    CALL_STACK(ctx, ev);
+}
+
+INLINE void set_callstack(struct event_t *event, struct pt_regs *ctx) {
+    event->kernel_stack_id = bpf_get_stackid(ctx, &skbtracer_stack, 0);
+    return;
 }
 
 INLINE void set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info) {
@@ -391,10 +338,8 @@ INLINE void set_pkt_info(struct sk_buff *skb, struct pkt_info_t *pkt_info) {
 }
 
 INLINE void set_ether_info(struct sk_buff *skb, struct l2_info_t *l2_info) {
-    struct ethhdr *eh = (struct ethhdr *)get_l2_header(skb);
-    bpf_probe_read(&l2_info->dest_mac, 6, &eh->h_dest);
-    l2_info->l3_proto = BPF_CORE_READ(eh, h_proto);
-    l2_info->l3_proto = bpf_ntohs(l2_info->l3_proto);
+    unsigned char *l2_header = get_l2_header(skb);
+    bpf_probe_read(&l2_info->dest_mac, 6, l2_header);
 }
 
 INLINE void set_ipv4_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
@@ -416,20 +361,13 @@ INLINE void set_ipv6_info(struct sk_buff *skb, struct l3_info_t *l3_info) {
     l3_info->ip_version = get_ip_version(iph);
 }
 
-#define tcp_flag_word(tp) (((union tcp_word_hdr *)(tp))->words[3])
-
 INLINE void set_tcp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
-    __be32 tcpflags;
-
     struct tcphdr *th = (struct tcphdr *)get_l4_header(skb);
     l4_info->sport = BPF_CORE_READ(th, source);
     l4_info->sport = bpf_ntohs(l4_info->sport);
     l4_info->dport = BPF_CORE_READ(th, dest);
     l4_info->dport = bpf_ntohs(l4_info->dport);
-
-    tcpflags = tcp_flag_word(th);
-    tcpflags = (tcpflags >> 16) & 0xff;
-    init_tcpflags_bits(l4_info->tcpflags, tcpflags);
+    bpf_probe_read(&l4_info->tcpflags, 2, (char *)th + 12);
 }
 
 INLINE void set_udp_info(struct sk_buff *skb, struct l4_info_t *l4_info) {
@@ -460,24 +398,21 @@ INLINE void set_iptables_info(struct xt_table *table,
     ipt_info->pf = BPF_CORE_READ(state, pf);
 }
 
-INLINE bool filter_l3_and_l4_info(struct sk_buff *skb) {
-    u64 addr = get_cfg_ip();
-    u64 proto = get_cfg_proto();
-    u64 port = get_cfg_port();
-    u64 icmpid = get_cfg_icmpid();
+INLINE bool filter_l3_and_l4_info(struct config *cfg, struct sk_buff *skb) {
+    u32 addr = cfg->ip;
+    u8 proto = cfg->proto;
+    u16 port = cfg->port;
+    u16 icmpid = cfg->icmpid;
 
-    unsigned char *l2_header = get_l2_header(skb);
     unsigned char *l3_header;
     unsigned char *l4_header;
 
-    struct ethhdr *eh = (struct ethhdr *)l2_header;
     u8 ip_version;
-    u16 l3_proto;
 
     struct iphdr *iph;
     struct ipv6hdr *ip6h;
     u32 saddr, daddr;
-    u8 l4_proto;
+    u8 l4_proto = 0;
 
     struct tcphdr *th;
     struct udphdr *uh;
@@ -488,13 +423,8 @@ INLINE bool filter_l3_and_l4_info(struct sk_buff *skb) {
     u8 proto_icmp_echo_request;
     u8 proto_icmp_echo_reply;
 
-    l3_header = get_l3_header(skb);
-    l3_proto = BPF_CORE_READ(eh, h_proto);
-    l3_proto = bpf_ntohs(l3_proto);
-
-    if (l3_proto != ETH_P_IP && l3_proto != ETH_P_IPV6) return true;
-
     // filter ip addr
+    l3_header = get_l3_header(skb);
     ip_version = get_ip_version(l3_header);
     if (ip_version == 4) {
         iph = (struct iphdr *)l3_header;
@@ -504,14 +434,16 @@ INLINE bool filter_l3_and_l4_info(struct sk_buff *skb) {
             return addr != saddr && addr != daddr;
         }
 
-        l4_proto = BPF_CORE_READ(iph, protocol);
+        // l4_proto = BPF_CORE_READ(iph, protocol);
+        bpf_probe_read(&l4_proto, 1, &iph->protocol);
         if (l4_proto == IPPROTO_ICMP) {
             proto_icmp_echo_request = ICMP_ECHO;
             proto_icmp_echo_reply = ICMP_ECHOREPLY;
         }
     } else if (ip_version == 6) {
         ip6h = (struct ipv6hdr *)l3_header;
-        l4_proto = BPF_CORE_READ(ip6h, nexthdr);
+        // l4_proto = BPF_CORE_READ(ip6h, nexthdr);
+        bpf_probe_read(&l4_proto, 1, &ip6h->nexthdr);
         if (l4_proto == IPPROTO_ICMPV6) {
             proto_icmp_echo_request = ICMPV6_ECHO_REQUEST;
             proto_icmp_echo_reply = ICMPV6_ECHO_REPLY;
@@ -520,25 +452,21 @@ INLINE bool filter_l3_and_l4_info(struct sk_buff *skb) {
         return true;
     }
 
-    switch (l4_proto) {
-    case IPPROTO_ICMP:
-    case IPPROTO_ICMPV6:
+    // filter layer 4 protocol
+    // if (proto != 0 && proto != l4_proto) { // TODO: fixme to filter tcp
+    //     bpf_printk("filtering l4 proto: %d", l4_proto);
+    //     return true;
+    // }
+
+    if (l4_proto == IPPROTO_ICMP || l4_proto == IPPROTO_ICMPV6) {
         l4_header = get_l4_header(skb);
         bpf_probe_read(&ih, sizeof(ih), l4_header);
         if (ih.type != proto_icmp_echo_request && ih.type != proto_icmp_echo_reply)
             return true;
-        break;
-    case IPPROTO_TCP:
-    case IPPROTO_UDP:
+    } else if (l4_proto == IPPROTO_TCP || l4_proto == IPPROTO_UDP) {
         l4_header = get_l4_header(skb);
-        break;
-    default:
+    } else {
         return true;
-    }
-
-    // filter layer 4 protocol
-    if (proto != 0) {
-        return proto != l4_proto;
     }
 
     // filter layer 4 port
@@ -563,35 +491,26 @@ INLINE bool filter_l3_and_l4_info(struct sk_buff *skb) {
         }
 
         ev_icmpid = ih.un.echo.id;
-        return icmpid != ev_icmpid;
+        // if (icmpid != ev_icmpid) return true; // TODO: fixme
     }
 
     return false;
 }
 
-INLINE bool filter_pid(void) {
-    u64 cfg = get_cfg_pid();
-    u64 tgid = bpf_get_current_pid_tgid() >> 32;
-    return cfg != 0 && cfg != tgid;
-}
-
-INLINE bool filter_netns(struct sk_buff *skb) {
-    u64 cfg = get_cfg_netns();
+INLINE bool filter_netns(struct config *cfg, struct sk_buff *skb) {
     u32 netns = get_netns(skb);
-    return cfg != 0 && netns != 0 && cfg != netns;
+    return cfg->netns != 0 && netns != 0 && cfg->netns != netns;
 }
 
-INLINE bool filter_route(void) {
-    u64 cfg = get_cfg_noroute();
-    return cfg != 0;
+INLINE bool filter_pid(struct config *cfg) {
+    u32 tgid = bpf_get_current_pid_tgid() >> 32;
+    return cfg->pid != 0 && cfg->pid != tgid;
 }
 
-INLINE bool filter_iptables(void) {
-    u64 cfg = get_cfg_iptable();
-    return cfg == 0;
+INLINE bool filter_dropstack(struct config *cfg) {
+    return cfg->dropstack == 0;
 }
 
-INLINE bool filter_dropstack(void) {
-    u64 cfg = get_cfg_dropstack();
-    return cfg == 0;
+INLINE bool filter_callstack(struct config *cfg) {
+    return cfg->callstack == 0;
 }

@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-	"net"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/dropbox/goebpf"
 )
@@ -84,6 +84,20 @@ func (p *bpfProgram) loadPrograms() error {
 	return nil
 }
 
+type BpfConfig struct {
+	NetNS     uint32
+	Pid       uint32
+	IP        uint32
+	Port      uint16
+	IcmpID    uint16
+	DropStack uint8
+	CallStack uint8
+	Keep      uint8
+	Proto     uint8
+}
+
+const sizeOfBpfConfig = int(unsafe.Sizeof(BpfConfig{}))
+
 func (p *bpfProgram) storeConfig() error {
 	if p.err != nil {
 		return p.err
@@ -94,54 +108,37 @@ func (p *bpfProgram) storeConfig() error {
 		return fmt.Errorf("bpf map(tracer_cfg) not found")
 	}
 
-	update := func(k byte, v uint64, key string) error {
-		err := m.Upsert(k, v)
-		if err != nil {
-			err = fmt.Errorf("failed to store bpf config(%s), err: %w", key, err)
-		}
-		return err
-	}
-	bool2uint64 := func(b bool) uint64 {
+	bool2uint8 := func(b bool) uint8 {
 		if b {
 			return 1
 		}
 		return 0
 	}
 
-	configs := []struct {
-		name string
-		k    byte
-		v    uint64
-	}{
-		{"pid", 1, uint64(cfg.Pid)},
-		{"ip", 2, uint64(ip2uint32(cfg.IP))},
-		{"port", 3, uint64(cfg.Port)},
-		{"icmpid", 4, uint64(cfg.IcmpID)},
-		{"dropstack", 5, bool2uint64(cfg.DropStack)},
-		{"callstack", 6, bool2uint64(cfg.CallStack)},
-		{"iptable", 7, bool2uint64(cfg.Iptable)},
-		{"noroute", 8, bool2uint64(cfg.NoRoute)},
-		{"keep", 9, bool2uint64(cfg.Keep)},
-		{"proto", 10, uint64(cfg.proto)},
-		{"netns", 11, uint64(cfg.NetNS)},
+	bc := BpfConfig{
+		NetNS:     cfg.NetNS,
+		Pid:       cfg.Pid,
+		IP:        cfg.ip,
+		Port:      (cfg.Port >> 8) & (cfg.Port << 8),
+		IcmpID:    (cfg.IcmpID >> 8) & (cfg.IcmpID << 8),
+		DropStack: bool2uint8(cfg.DropStack),
+		CallStack: bool2uint8(cfg.CallStack),
+		Keep:      bool2uint8(cfg.Keep),
+		Proto:     cfg.proto,
 	}
-	for _, c := range configs {
-		if c.v != 0 {
-			if err := update(c.k, c.v, c.name); err != nil {
-				return err
-			}
-		}
+
+	var h reflect.SliceHeader
+	h.Data = uintptr(unsafe.Pointer(&bc))
+	h.Len = sizeOfBpfConfig
+	h.Cap = sizeOfBpfConfig
+	val := *(*[]byte)(unsafe.Pointer(&h))
+
+	err := m.Upsert(uint32(0), val)
+	if err != nil {
+		return fmt.Errorf("failed to update bpf config, err: %w", err)
 	}
 
 	return nil
-}
-
-func ip2uint32(ip string) uint32 {
-	_ip := net.ParseIP(ip).To4()
-	if _ip == nil {
-		return 0
-	}
-	return binary.BigEndian.Uint32(_ip)
 }
 
 func (p *bpfProgram) attachProbes() error {

@@ -4,19 +4,19 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"unsafe"
 )
 
 // Config is the configurations for the bpf program.
 type Config struct {
 	CatchCount uint64
 	IP         string
+	ip         uint32
 	Proto      string
-	proto      int
-	IcmpID     uint64
-	Port       uint64
-	Pid        uint64
-	NetNS      uint64
+	proto      uint8
+	IcmpID     uint16
+	Port       uint16
+	Pid        uint32
+	NetNS      uint32
 	DropStack  bool
 	CallStack  bool
 	Iptable    bool
@@ -34,11 +34,11 @@ func init() {
 	fs := rootCmd.PersistentFlags()
 	fs.StringVarP(&cfg.IP, "ipaddr", "H", "", "ip address")
 	fs.StringVar(&cfg.Proto, "proto", "", "tcp|udp|icmp|any")
-	fs.Uint64Var(&cfg.IcmpID, "icmpid", 0, "trace icmp id")
+	fs.Uint16Var(&cfg.IcmpID, "icmpid", 0, "trace icmp id")
 	fs.Uint64VarP(&cfg.CatchCount, "catch-count", "c", 1000, "catch and print count")
-	fs.Uint64VarP(&cfg.Port, "port", "P", 0, "udp or tcp port")
-	fs.Uint64VarP(&cfg.Pid, "pid", "p", 0, "trace this PID only")
-	fs.Uint64VarP(&cfg.NetNS, "netns", "N", 0, "trace this Network Namespace only")
+	fs.Uint16VarP(&cfg.Port, "port", "P", 0, "udp or tcp port")
+	fs.Uint32VarP(&cfg.Pid, "pid", "p", 0, "trace this PID only")
+	fs.Uint32VarP(&cfg.NetNS, "netns", "N", 0, "trace this Network Namespace only")
 	fs.BoolVar(&cfg.DropStack, "dropstack", false, "output kernel stack trace when drop packet")
 	fs.BoolVar(&cfg.CallStack, "callstack", false, "output kernel stack trace")
 	fs.BoolVar(&cfg.Iptable, "iptable", false, "output iptable path")
@@ -62,13 +62,8 @@ func (c *Config) parse() error {
 		if ip == nil {
 			return fmt.Errorf("invalid IPv4 addr(%s)", ip)
 		}
-	}
 
-	port := c.Port
-	if port != 0 {
-		b := make([]byte, 8)
-		*(*uint64)(unsafe.Pointer(&b[0])) = port // ref: github.com/mdlayher/netlink/nlenc
-		c.Port = binary.BigEndian.Uint64(b)      // Note: to network byte order
+		c.ip = binary.BigEndian.Uint32(ip)
 	}
 
 	proto := c.Proto
