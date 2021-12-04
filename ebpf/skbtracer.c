@@ -12,9 +12,6 @@ INLINE bool do_trace_skb(struct event_t *event, struct config *cfg,
     if (filter_pid(cfg) || filter_netns(cfg, skb) || filter_l3_and_l4_info(cfg, skb))
         return false;
 
-    if (!filter_callstack(cfg))
-        set_callstack(event, ctx);
-
     event->flags |= SKBTRACER_EVENT_IF;
     set_event_info(skb, event);
     set_pkt_info(skb, &event->pkt_info);
@@ -56,6 +53,9 @@ INLINE int do_trace(struct pt_regs *ctx, struct sk_buff *skb, const char *func_n
     GET_EVENT_BUF();
 
     if (!do_trace_skb(event, cfg, ctx, skb)) return 0;
+
+    if (!filter_callstack(cfg))
+        set_callstack(event, ctx);
 
     bpf_strncpy(event->func_name, func_name, FUNCNAME_MAX_LEN);
     bpf_perf_event_output(ctx, &skbtracer_event, BPF_F_CURRENT_CPU, event,
@@ -260,16 +260,6 @@ int k_ip_finish_out(struct pt_regs *ctx) {
     return do_trace(ctx, skb, "ip_finish_output");
 }
 
-#if 0
-SEC("kprobe/deliver_clone")
-int k_deliver_clone(struct pt_regs *ctx)
-{
-    GET_ARGS();
-    GET_ARG(struct sk_buff *, skb, args[1]);
-    return do_trace(ctx, skb, "deliver_clone");
-}
-#endif
-
 INLINE int __ipt_do_table_in(struct pt_regs *ctx, struct sk_buff *skb,
                              const struct nf_hook_state *state,
                              struct xt_table *table) {
@@ -339,27 +329,30 @@ int ipt_kr_do_table(struct pt_regs *ctx) {
     return __ipt_do_table_out(ctx, skb);
 }
 
-SEC("kprobe/__kfree_skb") // failed to load on Ubuntu 18.04.5 LTS with kernel 5.10.29-051029-generic
+SEC("kprobe/__kfree_skb")
 int k___kfree_skb(struct pt_regs *ctx) {
+    u32 index = 0;
+    struct config *cfg = NULL;
+
     GET_ARGS();
     GET_ARG(struct sk_buff *, skb, args[0]);
 
     GET_EVENT_BUF();
 
-    u32 index = 0;
-    struct config *cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
-
-    if (!filter_dropstack(cfg))
-        set_callstack(event, ctx);
+    cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
+    if (cfg == NULL) return 0;
 
     if (!do_trace_skb(event, cfg, ctx, skb))
         return 0;
 
+    if (!filter_dropstack(cfg))
+        set_callstack(event, ctx);
+
     event->flags |= SKBTRACER_EVENT_DROP;
     event->start_ns = bpf_ktime_get_ns();
     bpf_strncpy(event->func_name, "__kfree_skb", FUNCNAME_MAX_LEN);
-    bpf_perf_event_output(ctx, &skbtracer_event, BPF_F_CURRENT_CPU,
-                          event, sizeof(event));
+    bpf_perf_event_output(ctx, &skbtracer_event, BPF_F_CURRENT_CPU, event,
+                          sizeof(struct event_t));
     return 0;
 }
 

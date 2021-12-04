@@ -43,6 +43,7 @@ char _license[] SEC("license") = "GPL";
 #define XT_TABLE_MAXNAMELEN 32
 
 #define NULL ((void *)0)
+#define MAX_STACKDEPTH 50
 #define MAX_ARGLEN 256
 #define MAX_ARGS 20
 #define NARGS 6
@@ -219,9 +220,9 @@ BPF_MAP_ADD(skbtracer_ipt);
 
 BPF_MAP_DEF(skbtracer_stack) = {
     .map_type = BPF_MAP_TYPE_STACK_TRACE,
-    .key_size = 4,
-    .value_size = 1000,
-    .max_entries = 2048,
+    .key_size = sizeof(u32),
+    .value_size = MAX_STACKDEPTH * sizeof(u64),
+    .max_entries = 256,
 };
 BPF_MAP_ADD(skbtracer_stack);
 

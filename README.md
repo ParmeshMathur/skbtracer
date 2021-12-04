@@ -17,18 +17,19 @@ Usage:
   skbtracer [flags]
 
 Flags:
-      --callstack          output kernel stack trace (DEPRECATED: not implemented to print the function stack)
+      --callstack          output kernel stack trace
   -c, --catch-count uint   catch and print count (default 1000)
-      --dropstack          output kernel stack trace when drop packet (DEPRECATED: not supported on Ubuntu 18.04.5 LTS with kernel 5.10.29-051029-generic)
+      --dropstack          output kernel stack trace when drop packet
+      --gops string        gops address
   -h, --help               help for skbtracer
-      --icmpid uint        trace icmp id
+      --icmpid uint16      trace icmp id
   -H, --ipaddr string      ip address
       --iptable            output iptable path
       --keep               keep trace packet all lifetime (DEPRECATED: not implemented yet)
-  -N, --netns uint         trace this Network Namespace only
+  -N, --netns uint32       trace this Network Namespace only
       --noroute            do not output route path
-  -p, --pid uint           trace this PID only
-  -P, --port uint          udp or tcp port
+  -p, --pid uint32         trace this PID only
+  -P, --port uint16        udp or tcp port
       --proto string       tcp|udp|icmp|any
   -T, --time               show HH:MM:SS timestamp (default true)
   -t, --timestamp          show timestamp in seconds at us resolution
@@ -39,16 +40,16 @@ Flags:
 ```bash
 $ sudo ./skbtracer -c 10
 TIME       SKB                  NETWORK_NS   PID      CPU    INTERFACE          DEST_MAC           IP_LEN PKT_INFO                                               TRACE_INFO
-[14:08:57] [0xffff8d8d1426ca00] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  146    U:192.168.0.1:53->10.0.2.15:55663                      pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c800] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  44     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c000] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  40     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c000] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  1500   T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c800] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  1500   T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c800] [4026531992] 60373    3      enp0s3             08:00:27:99:a7:c5  1500   T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c200] [4026531992] 60373    3      enp0s3             08:00:27:99:a7:c5  938    T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c200] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  40     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c200] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  160    T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
-[14:08:57] [0xffff8d8d1426c100] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  40     T:192.168.0.101:443->10.0.2.15:41494                  pkt_type=HOST func=napi_gro_receive
+[05:32:58] [0xffff8ab8cf0a5800] [4026531992] 0        3      enp0s3             00:00:00:00:00:00  40     T_PSH:10.0.2.15:56602->10.0.2.10:443                   pkt_type=HOST func=__dev_queue_xmit
+[05:32:58] [0xffff8ab8cf0a5800] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  40     T_PSH:10.0.2.10:443->10.0.2.15:56602                   pkt_type=HOST func=napi_gro_receive
+[05:32:58] [0xffff8ab8cf0a5800] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  1500   T_PSH:10.0.2.10:443->10.0.2.15:56602                   pkt_type=HOST func=napi_gro_receive
+[05:32:58] [0xffff8ab8cf0a5100] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  1500   T_PSH:10.0.2.10:443->10.0.2.15:56602                   pkt_type=HOST func=napi_gro_receive
+[05:32:58] [0xffff8ab8cf0a5100] [4026531992] 0        3      enp0s3             00:00:00:00:00:00  40     T_PSH:10.0.2.15:56602->10.0.2.10:443                   pkt_type=HOST func=ip_finish_output
+[05:32:58] [0xffff8ab8cf0a5100] [4026531992] 0        3      enp0s3             00:00:00:00:00:00  40     T_PSH:10.0.2.15:56602->10.0.2.10:443                   pkt_type=HOST func=__dev_queue_xmit
+[05:32:58] [0xffff8ab8cf0a5100] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  1000   T_ACK,PSH:10.0.2.10:443->10.0.2.15:56602               pkt_type=HOST func=napi_gro_receive
+[05:32:58] [0xffff8ab8cf0a5100] [4026531992] 0        3      enp0s3             00:00:00:00:00:00  40     T_PSH:10.0.2.15:56602->10.0.2.10:443                   pkt_type=HOST func=ip_finish_output
+[05:32:58] [0xffff8ab8cf0a5100] [4026531992] 0        3      enp0s3             00:00:00:00:00:00  40     T_PSH:10.0.2.15:56602->10.0.2.10:443                   pkt_type=HOST func=__dev_queue_xmit
+[05:32:58] [0xffff8ab8cf0a5100] [4026531992] 0        3      enp0s3             08:00:27:99:a7:c5  387    T_ACK,PSH:10.0.2.10:443->10.0.2.15:56602               pkt_type=HOST func=napi_gro_receive
 Printed 10 events, exiting...
 
 10 event(s) received
@@ -73,9 +74,6 @@ Printed 10 events, exiting...
 ## TODO
 
 - [ ] tracepoint:{net,tcp,udp}:*
-- [ ] 打印函数调用栈，需要根据地址找到对应的函数名称
-- [ ] 支持 `kprobe deliver_clone`
-- [ ] 支持 `kprobe __kfree_skb`
 
 ## 测试环境
 

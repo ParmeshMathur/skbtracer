@@ -48,8 +48,6 @@ func init() {
 	fs.BoolVarP(&cfg.Timestamp, "timestamp", "t", false, "show timestamp in seconds at us resolution")
 	fs.StringVar(&cfg.Gops, "gops", "", "gops address")
 
-	fs.Lookup("dropstack").Deprecated = "not supported on Ubuntu 18.04.5 LTS with kernel 5.10.29-051029-generic"
-	fs.Lookup("callstack").Deprecated = "not implemented to print the function stack"
 	fs.Lookup("keep").Deprecated = "not implemented yet"
 }
 

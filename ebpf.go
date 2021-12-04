@@ -17,6 +17,9 @@ type bpfProgram struct {
 	pe  *goebpf.PerfEvents
 	wg  sync.WaitGroup
 
+	addr2name Addr2Name
+	callstack goebpf.Map
+
 	stopCh chan struct{}
 
 	err error
@@ -41,6 +44,7 @@ func newBpfProgram(bpfProg []byte) (*bpfProgram, error) {
 
 func (p *bpfProgram) start() error {
 
+	p.err = p.initCallStack()
 	p.err = p.storeConfig()
 	p.err = p.loadPrograms()
 	p.err = p.attachProbes()
@@ -224,12 +228,7 @@ func (p *bpfProgram) recvPerfEvent(events <-chan []byte) {
 			}
 
 			fmt.Println(ev.output())
-
-			callStack := p.getCallStack(ev.KernelStackID)
-			if len(callStack) != 0 {
-				// TODO: deal callstack
-				_ = callStack
-			}
+			p.printCallStack(&ev)
 
 			select {
 			case <-p.stopCh:
@@ -238,6 +237,7 @@ func (p *bpfProgram) recvPerfEvent(events <-chan []byte) {
 			}
 		}
 
+		// prevent the internal perf-event channel blocking
 		go func() {
 			for range events {
 			}
@@ -248,19 +248,65 @@ func (p *bpfProgram) recvPerfEvent(events <-chan []byte) {
 	}(events)
 }
 
-func (p *bpfProgram) getCallStack(id int32) []byte {
+func (p *bpfProgram) initCallStack() error {
+	if p.err != nil {
+		return p.err
+	}
 
-	if !cfg.CallStack || id < 0 {
-		return nil
+	a2n, err := GetAddrs()
+	if err != nil {
+		return fmt.Errorf("failed to prepare func addr to func name, err: %w", err)
 	}
 
 	m := p.bpf.GetMapByName("skbtracer_stack")
 	if m == nil {
+		return fmt.Errorf("bpf map(tracer_cfg) not found")
+	}
+
+	p.addr2name = a2n
+	p.callstack = m
+	return nil
+}
+
+func (p *bpfProgram) getCallStack(e *perfEvent) []byte {
+
+	if e.KernelStackID < 0 {
 		return nil
 	}
 
-	callStack, _ := m.Lookup(id)
-	return callStack
+	if cfg.CallStack {
+		return p.doGetCallStack(e.KernelStackID)
+	}
+
+	if cfg.DropStack && goebpf.NullTerminatedStringToString(e.FuncName[:]) == "__kfree_skb" {
+		return p.doGetCallStack(e.KernelStackID)
+	}
+
+	return nil
+}
+
+func (p *bpfProgram) doGetCallStack(id int32) []byte {
+
+	callstack, err := p.callstack.Lookup(id)
+	if err == nil {
+		_ = p.callstack.Delete(id)
+	}
+	return callstack
+}
+
+func (p *bpfProgram) printCallStack(e *perfEvent) {
+
+	callstack := p.getCallStack(e)
+	if len(callstack) == 0 {
+		return
+	}
+
+	for i := 0; i < len(callstack); i += 8 {
+		ip := *(*uint64)(unsafe.Pointer(&callstack[i]))
+		if ip > 0 {
+			fmt.Printf("        %s\n", p.addr2name.findNearestSym(ip))
+		}
+	}
 }
 
 var stopOnce sync.Once
