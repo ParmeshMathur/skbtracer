@@ -44,39 +44,6 @@ char _license[] SEC("license") = "GPL";
 
 #define NULL ((void *)0)
 #define MAX_STACKDEPTH 50
-#define MAX_ARGLEN 256
-#define MAX_ARGS 20
-#define NARGS 6
-
-typedef unsigned long args_t;
-
-INLINE void get_args(struct pt_regs *ctx, unsigned long *args) {
-    // if registers are valid then use them directly (kernel version < 4.17)
-    if (ctx->orig_ax || ctx->bx || ctx->cx || ctx->dx) {
-        args[0] = PT_REGS_PARM1(ctx);
-        args[1] = PT_REGS_PARM2(ctx);
-        args[2] = PT_REGS_PARM3(ctx);
-        args[3] = PT_REGS_PARM4(ctx);
-        args[4] = PT_REGS_PARM5(ctx);
-        args[5] = PT_REGS_PARM6(ctx);
-    } else {
-        // otherwise it's a later kernel version so load register values from
-        // ctx->di.
-        struct pt_regs *regs = (struct pt_regs *)ctx->di;
-        bpf_probe_read(&args[0], sizeof(*args), &regs->di);
-        bpf_probe_read(&args[1], sizeof(*args), &regs->si);
-        bpf_probe_read(&args[2], sizeof(*args), &regs->dx);
-        bpf_probe_read(&args[3], sizeof(*args), &regs->r10);
-        bpf_probe_read(&args[4], sizeof(*args), &regs->r8);
-        bpf_probe_read(&args[5], sizeof(*args), &regs->r9);
-    }
-}
-
-#define GET_ARGS()           \
-    args_t args[NARGS] = {}; \
-    get_args(ctx, args)
-
-#define GET_ARG(type, name, arg) type name = (type)arg
 
 struct config {
     u32 netns;
