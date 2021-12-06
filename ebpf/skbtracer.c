@@ -306,6 +306,20 @@ int ipt_kr_do_table(struct pt_regs *ctx) {
     return __ipt_do_table_out(ctx, skb);
 }
 
+SEC("kprobe/ip6t_do_table")
+int ipt_k_do_tbl6(struct pt_regs *ctx) {
+    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM1(ctx);
+    struct nf_hook_state *state = (struct nf_hook_state *)PT_REGS_PARM2(ctx);
+    struct xt_table *table = (struct xt_table *)PT_REGS_PARM3(ctx);
+    return __ipt_do_table_in(ctx, skb, state, table);
+};
+
+SEC("kretprobe/ip6t_do_table")
+int ipt_kr_do_tbl6(struct pt_regs *ctx) {
+    struct sk_buff *skb = (void *)ctx->bx;
+    return __ipt_do_table_out(ctx, skb);
+}
+
 SEC("kprobe/__kfree_skb")
 int k___kfree_skb(struct pt_regs *ctx) {
     u32 index = 0;
@@ -331,20 +345,3 @@ int k___kfree_skb(struct pt_regs *ctx) {
                           sizeof(struct event_t));
     return 0;
 }
-
-#if 0
-SEC("kprobe/ip6t_do_table")
-int k_ip6t_do_table(struct pt_regs *ctx)
-{
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM1(ctx);
-    const GET_ARG(struct nf_hook_state *, state, args[1]);
-    GET_ARG(struct xt_table *, table, args[2]);
-    return __ipt_do_table_in(ctx, skb, state, table);
-};
-
-SEC("kretprobe/ip6t_do_table")
-int kr_ip6t_do_table(struct pt_regs *ctx)
-{
-    return __ipt_do_table_out(ctx);
-}
-#endif

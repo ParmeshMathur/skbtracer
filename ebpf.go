@@ -61,7 +61,7 @@ func (p *bpfProgram) filterBpfProg(progName string) bool {
 	}
 
 	// filter iptables
-	if !cfg.Iptable && strings.HasPrefix(progName, "ipt_") {
+	if !cfg.Iptables && strings.HasPrefix(progName, "ipt_") {
 		return true
 	}
 

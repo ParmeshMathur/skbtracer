@@ -19,7 +19,7 @@ type Config struct {
 	NetNS      uint32
 	DropStack  bool
 	CallStack  bool
-	Iptable    bool
+	Iptables   bool
 	NoRoute    bool
 	Keep       bool
 	Time       bool
@@ -41,7 +41,7 @@ func init() {
 	fs.Uint32VarP(&cfg.NetNS, "netns", "N", 0, "trace this Network Namespace only")
 	fs.BoolVar(&cfg.DropStack, "dropstack", false, "output kernel stack trace when drop packet")
 	fs.BoolVar(&cfg.CallStack, "callstack", false, "output kernel stack trace")
-	fs.BoolVar(&cfg.Iptable, "iptable", false, "output iptable path")
+	fs.BoolVar(&cfg.Iptables, "iptables", false, "output iptables path")
 	fs.BoolVar(&cfg.NoRoute, "noroute", false, "do not output route path")
 	fs.BoolVar(&cfg.Keep, "keep", false, "keep trace packet all lifetime")
 	fs.BoolVarP(&cfg.Time, "time", "T", true, "show HH:MM:SS timestamp")
