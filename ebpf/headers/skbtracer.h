@@ -421,14 +421,13 @@ INLINE bool filter_l3_and_l4_info(struct config *cfg, struct sk_buff *skb) {
     }
 
     // filter layer 4 protocol
-    // if (proto != 0 && proto != l4_proto) { // TODO: fixme to filter tcp
-    //     bpf_printk("filtering l4 proto: %d", l4_proto);
-    //     return true;
-    // }
+    if (proto != 0 && proto != l4_proto)
+        return true;
 
     if (l4_proto == IPPROTO_ICMP || l4_proto == IPPROTO_ICMPV6) {
         l4_header = get_l4_header(skb);
         bpf_probe_read(&ih, sizeof(ih), l4_header);
+        ev_icmpid = ih.un.echo.id;
         if (ih.type != proto_icmp_echo_request && ih.type != proto_icmp_echo_reply)
             return true;
     } else if (l4_proto == IPPROTO_TCP || l4_proto == IPPROTO_UDP) {
@@ -454,12 +453,13 @@ INLINE bool filter_l3_and_l4_info(struct config *cfg, struct sk_buff *skb) {
 
     // filter icmp id
     if (proto != 0 && icmpid != 0) {
-        if (proto != IPPROTO_ICMP || (l4_proto != IPPROTO_ICMP && l4_proto != IPPROTO_ICMPV6)) {
+        if (proto != IPPROTO_ICMP)
             return false;
-        }
+        if (l4_proto != IPPROTO_ICMP && l4_proto != IPPROTO_ICMPV6)
+            return false;
 
-        ev_icmpid = ih.un.echo.id;
-        // if (icmpid != ev_icmpid) return true; // TODO: fixme
+        if (icmpid != ev_icmpid)
+            return true;
     }
 
     return false;
