@@ -24,7 +24,7 @@ Flags:
   -h, --help               help for skbtracer
       --icmpid uint16      trace icmp id
   -H, --ipaddr string      ip address
-      --iptable            output iptable path
+      --iptables           output iptables path
       --keep               keep trace packet all lifetime (DEPRECATED: not implemented yet)
   -N, --netns uint32       trace this Network Namespace only
       --noroute            do not output route path

@@ -65,6 +65,13 @@ BPF_MAP_DEF(skbtracer_cfg) = {
 };
 BPF_MAP_ADD(skbtracer_cfg);
 
+#define GET_CFG()                                      \
+    u32 index = 0;                                     \
+    struct config *cfg = NULL;                         \
+    cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index); \
+    if (cfg == NULL) return 0;                         \
+    cfg->ip = bpf_htonl(cfg->ip)
+
 union addr {
     u32 v4addr;
     struct {

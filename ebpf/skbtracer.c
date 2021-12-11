@@ -44,12 +44,7 @@ INLINE bool do_trace_skb(struct event_t *event, struct config *cfg,
 }
 
 INLINE int do_trace(struct pt_regs *ctx, struct sk_buff *skb, const char *func_name) {
-    u32 index = 0;
-    struct config *cfg = NULL;
-
-    cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
-    if (cfg == NULL) return 0;
-
+    GET_CFG();
     GET_EVENT_BUF();
 
     if (!do_trace_skb(event, cfg, ctx, skb)) return 0;
@@ -260,8 +255,6 @@ INLINE int __ipt_do_table_out(struct pt_regs *ctx, struct sk_buff *skb) {
     u32 pid;
     u32 verdict;
     u64 ipt_delay;
-    u32 index = 0;
-    struct config *cfg = NULL;
     struct ipt_do_table_args *args;
 
     pid = bpf_get_current_pid_tgid();
@@ -269,10 +262,8 @@ INLINE int __ipt_do_table_out(struct pt_regs *ctx, struct sk_buff *skb) {
     if (args == NULL) return 0;
     bpf_map_delete_elem(&skbtracer_ipt, &pid);
 
+    GET_CFG();
     GET_EVENT_BUF();
-
-    cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
-    if (cfg == NULL) return 0;
 
     if (!do_trace_skb(event, cfg, ctx, args->skb)) return 0;
 
@@ -322,15 +313,10 @@ int ipt_kr_do_tbl6(struct pt_regs *ctx) {
 
 SEC("kprobe/__kfree_skb")
 int k___kfree_skb(struct pt_regs *ctx) {
-    u32 index = 0;
-    struct config *cfg = NULL;
-
     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM1(ctx);
 
+    GET_CFG();
     GET_EVENT_BUF();
-
-    cfg = bpf_map_lookup_elem(&skbtracer_cfg, &index);
-    if (cfg == NULL) return 0;
 
     if (!do_trace_skb(event, cfg, ctx, skb))
         return 0;
