@@ -25,8 +25,7 @@ Flags:
       --icmpid uint16      trace icmp id
   -H, --ipaddr string      ip address
       --iptables           output iptables path
-      --keep               keep trace packet all lifetime (DEPRECATED: not implemented yet)
-  -N, --netns uint32       trace this Network Namespace only
+  -N, --netns uint32       trace this netns inode only
       --noroute            do not output route path
   -p, --pid uint32         trace this PID only
   -P, --port uint16        udp or tcp port

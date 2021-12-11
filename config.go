@@ -21,7 +21,6 @@ type Config struct {
 	CallStack  bool
 	Iptables   bool
 	NoRoute    bool
-	Keep       bool
 	Time       bool
 	Timestamp  bool
 	Gops       string
@@ -38,17 +37,14 @@ func init() {
 	fs.Uint64VarP(&cfg.CatchCount, "catch-count", "c", 1000, "catch and print count")
 	fs.Uint16VarP(&cfg.Port, "port", "P", 0, "udp or tcp port")
 	fs.Uint32VarP(&cfg.Pid, "pid", "p", 0, "trace this PID only")
-	fs.Uint32VarP(&cfg.NetNS, "netns", "N", 0, "trace this Network Namespace only")
+	fs.Uint32VarP(&cfg.NetNS, "netns", "N", 0, "trace this netns inode only")
 	fs.BoolVar(&cfg.DropStack, "dropstack", false, "output kernel stack trace when drop packet")
 	fs.BoolVar(&cfg.CallStack, "callstack", false, "output kernel stack trace")
 	fs.BoolVar(&cfg.Iptables, "iptables", false, "output iptables path")
 	fs.BoolVar(&cfg.NoRoute, "noroute", false, "do not output route path")
-	fs.BoolVar(&cfg.Keep, "keep", false, "keep trace packet all lifetime")
 	fs.BoolVarP(&cfg.Time, "time", "T", true, "show HH:MM:SS timestamp")
 	fs.BoolVarP(&cfg.Timestamp, "timestamp", "t", false, "show timestamp in seconds at us resolution")
 	fs.StringVar(&cfg.Gops, "gops", "", "gops address")
-
-	fs.Lookup("keep").Deprecated = "not implemented yet"
 }
 
 func (c *Config) parse() error {

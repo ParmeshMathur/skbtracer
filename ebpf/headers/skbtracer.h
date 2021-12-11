@@ -53,8 +53,8 @@ struct config {
     u16 icmpid;
     u8 dropstack;
     u8 callstack;
-    u8 keep;
     u8 proto;
+    u8 pad;
 };
 
 BPF_MAP_DEF(skbtracer_cfg) = {
@@ -478,8 +478,8 @@ INLINE bool filter_netns(struct config *cfg, struct sk_buff *skb) {
 }
 
 INLINE bool filter_pid(struct config *cfg) {
-    u32 tgid = bpf_get_current_pid_tgid() >> 32;
-    return cfg->pid != 0 && cfg->pid != tgid;
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    return cfg->pid != 0 && cfg->pid != pid;
 }
 
 INLINE bool filter_dropstack(struct config *cfg) {

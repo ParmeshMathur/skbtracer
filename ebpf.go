@@ -96,8 +96,8 @@ type BpfConfig struct {
 	IcmpID    uint16
 	DropStack uint8
 	CallStack uint8
-	Keep      uint8
 	Proto     uint8
+	pad       uint8
 }
 
 const sizeOfBpfConfig = int(unsafe.Sizeof(BpfConfig{}))
@@ -127,7 +127,6 @@ func (p *bpfProgram) storeConfig() error {
 		IcmpID:    (cfg.IcmpID >> 8) & (cfg.IcmpID << 8),
 		DropStack: bool2uint8(cfg.DropStack),
 		CallStack: bool2uint8(cfg.CallStack),
-		Keep:      bool2uint8(cfg.Keep),
 		Proto:     cfg.proto,
 	}
 
