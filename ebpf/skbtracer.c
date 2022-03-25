@@ -1,4 +1,4 @@
-#include "skbtracer.h"
+#include "headers/skbtracer.h"
 
 /**
  * Common tracepoint handler. Detect IPv4/IPv6 and
@@ -127,77 +127,77 @@ int k_dev_q_xmit(struct pt_regs *ctx) {
  * struct sock *sk, struct sk_buff *skb)
  */
 
-SEC("kprobe/br_handle_frame_finish")
-int k_br_handle_ff(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
-    return do_trace(ctx, skb, "br_handle_frame_finish");
-}
+// SEC("kprobe/br_handle_frame_finish")
+// int k_br_handle_ff(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
+//     return do_trace(ctx, skb, "br_handle_frame_finish");
+// }
 
-SEC("kprobe/br_nf_pre_routing")
-int k_br_nf_prero(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
-    return do_trace(ctx, skb, "br_nf_pre_routing");
-}
+// SEC("kprobe/br_nf_pre_routing")
+// int k_br_nf_prero(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
+//     return do_trace(ctx, skb, "br_nf_pre_routing");
+// }
 
-SEC("kprobe/br_nf_pre_routing_finish")
-int k_brnf_prero_f(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
-    return do_trace(ctx, skb, "br_nf_pre_routing_finish");
-}
+// SEC("kprobe/br_nf_pre_routing_finish")
+// int k_brnf_prero_f(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
+//     return do_trace(ctx, skb, "br_nf_pre_routing_finish");
+// }
 
-SEC("kprobe/br_pass_frame_up")
-int k_br_pass_f_up(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM1(ctx);
-    return do_trace(ctx, skb, "br_pass_frame_up");
-}
+// SEC("kprobe/br_pass_frame_up")
+// int k_br_pass_f_up(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM1(ctx);
+//     return do_trace(ctx, skb, "br_pass_frame_up");
+// }
 
-SEC("kprobe/br_netif_receive_skb")
-int k_br_nif_rcv(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
-    return do_trace(ctx, skb, "br_netif_receive_skb");
-}
+// SEC("kprobe/br_netif_receive_skb")
+// int k_br_nif_rcv(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
+//     return do_trace(ctx, skb, "br_netif_receive_skb");
+// }
 
-SEC("kprobe/br_forward")
-int k_br_forward(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
-    return do_trace(ctx, skb, "br_forward");
-}
+// SEC("kprobe/br_forward")
+// int k_br_forward(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
+//     return do_trace(ctx, skb, "br_forward");
+// }
 
-SEC("kprobe/__br_forward")
-int k___br_fwd(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
-    return do_trace(ctx, skb, "__br_forward");
-}
+// SEC("kprobe/__br_forward")
+// int k___br_fwd(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
+//     return do_trace(ctx, skb, "__br_forward");
+// }
 
-SEC("kprobe/br_forward_finish")
-int k_br_fwd_f(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
-    return do_trace(ctx, skb, "br_forward_finish");
-}
+// SEC("kprobe/br_forward_finish")
+// int k_br_fwd_f(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
+//     return do_trace(ctx, skb, "br_forward_finish");
+// }
 
-SEC("kprobe/br_nf_forward_ip")
-int k_br_nf_fwd_ip(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
-    return do_trace(ctx, skb, "br_nf_forward_ip");
-}
+// SEC("kprobe/br_nf_forward_ip")
+// int k_br_nf_fwd_ip(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
+//     return do_trace(ctx, skb, "br_nf_forward_ip");
+// }
 
-SEC("kprobe/br_nf_forward_finish")
-int k_br_nf_fwd_fin(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
-    return do_trace(ctx, skb, "br_nf_forward_finish");
-}
+// SEC("kprobe/br_nf_forward_finish")
+// int k_br_nf_fwd_fin(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
+//     return do_trace(ctx, skb, "br_nf_forward_finish");
+// }
 
-SEC("kprobe/br_nf_post_routing")
-int k_br_nf_post_ro(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
-    return do_trace(ctx, skb, "br_nf_post_routing");
-}
+// SEC("kprobe/br_nf_post_routing")
+// int k_br_nf_post_ro(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
+//     return do_trace(ctx, skb, "br_nf_post_routing");
+// }
 
-SEC("kprobe/br_nf_dev_queue_xmit")
-int k_br_nf_q_xmit(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
-    return do_trace(ctx, skb, "br_nf_dev_queue_xmit");
-}
+// SEC("kprobe/br_nf_dev_queue_xmit")
+// int k_br_nf_q_xmit(struct pt_regs *ctx) {
+//     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM3(ctx);
+//     return do_trace(ctx, skb, "br_nf_dev_queue_xmit");
+// }
 
 /*
  * ip layer:
